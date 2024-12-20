@@ -122,63 +122,62 @@ with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
         print("Length: ", len(body))
         print("", flush=True)
 
-        if body_json['type'] == 'response' and body_json['command'] == 'initialize':
-            pass
-        elif body_json['type'] == 'event' and body_json['event'] == 'initialized':
-            # send breakpoints request
-            payload = set_breakpoints()
-            request_bytes = create_request(payload)
-            print(request_bytes)
-            s.sendall(request_bytes)
-            pass
-        elif body_json['type'] == 'response' and body_json['command'] == 'setBreakpoints':
-            payload = configuration_done()
-            request_bytes = create_request(payload)
-            print(request_bytes)
-            s.sendall(request_bytes)
-        elif body_json['type'] == 'response' and body_json['command'] == 'configurationDone':
-            pass
-        elif body_json['type'] == 'event' and body_json['event'] == 'stopped':
-            BRKPTNUM = BRKPTNUM + 1
-            payload = stacktrace()
-            request_bytes = create_request(payload)
-            print(request_bytes)
-            s.sendall(request_bytes)
-        elif body_json['type'] == 'response' and body_json['command'] == 'stackTrace':
-            payload = scopes(body_json['body']['stackFrames'][0]['id'])
-            request_bytes = create_request(payload)
-            print(request_bytes)
-            s.sendall(request_bytes)
-        elif body_json['type'] == 'response' and body_json['command'] == 'scopes':
-            payload = variables(body_json['body']['scopes'][0]['variablesReference'])
-            request_bytes = create_request(payload)
-            print(request_bytes)
-            s.sendall(request_bytes)
-        elif body_json['type'] == 'response' and body_json['command'] == 'variables':
-            toprint = []
-            for variable in body_json['body']['variables']:
-                toprint.append(f"{variable['name']} = {variable['value']}\n")
-                if variable['name'] in ['CacheVariables', 'Directories', 'Locals']:
-                    payload = variables(variable['variablesReference'])
-                    request_bytes = create_request(payload)
-                    print(request_bytes)
-                    s.sendall(request_bytes)
-                    print(f"Requesting variables: {variable['name']}")
-                    next_br = input("Next breakpoint? (y or n): ")
-                    if next_br == 'y':
-                        payload = dbg_continue()
+        match body_json:
+            case {"type": "response", "command": "initialize"}:
+                pass
+            case {"type": "event", "event": "initialized"}:
+                payload = set_breakpoints()
+                request_bytes = create_request(payload)
+                print(request_bytes)
+                s.sendall(request_bytes)
+            case {"type": "response", "command": "setBreakpoints"}:
+                payload = configuration_done()
+                request_bytes = create_request(payload)
+                print(request_bytes)
+                s.sendall(request_bytes)
+            case {"type": "response", "command": "configurationDone"}:
+                pass
+            case {"type": "event", "event": "stopped"}:
+                BRKPTNUM += 1
+                payload = stacktrace()
+                request_bytes = create_request(payload)
+                print(request_bytes)
+                s.sendall(request_bytes)
+            case {"type": "response", "command": "stackTrace",
+                  "body": {"stackFrames": [{"id": frame_id}]}}:
+                payload = scopes(frame_id)
+                request_bytes = create_request(payload)
+                print(request_bytes)
+                s.sendall(request_bytes)
+            case {"type": "response", "command": "scopes",
+                  "body": {"scopes": [{"variablesReference": var_ref}]}}:
+                payload = variables(var_ref)
+                request_bytes = create_request(payload)
+                print(request_bytes)
+                s.sendall(request_bytes)
+            case {"type": "response", "command": "variables"}:
+                toprint = []
+                for variable in body_json['body']['variables']:
+                    toprint.append(f"{variable['name']} = {variable['value']}\n")
+                    if variable['name'] in ['CacheVariables', 'Directories', 'Locals']:
+                        payload = variables(variable['variablesReference'])
                         request_bytes = create_request(payload)
                         print(request_bytes)
                         s.sendall(request_bytes)
+                        print(f"Requesting variables: {variable['name']}")
+                        next_br = input("Next breakpoint? (y or n): ")
+                        if next_br == 'y':
+                            payload = dbg_continue()
+                            request_bytes = create_request(payload)
+                            print(request_bytes)
+                            s.sendall(request_bytes)
 
-            with open(f"variables_break{BRKPTNUM}.txt", 'a') as varfile:
-                varfile.writelines(toprint)
+                with open(f"variables_break{BRKPTNUM}.txt", 'a') as varfile:
+                    varfile.writelines(toprint)
+            case _:  # Default case if no other case is matched
+                # Consider logging this for debugging.
+                print(f"Unhandled message type: {body_json}")
+                pass
 
-        else:
-            pass
-
-        if len(response) == 0 or b"\r\n\r\n" not in response:
+        while b"\r\n\r\n" not in response:
             response = response + s.recv(4096)
-            continue
-        else:
-            continue
