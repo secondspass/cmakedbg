@@ -1,0 +1,2 @@
+add_subdirectory(src1_subdir1)
+add_subdirectory(src1_subdir2)

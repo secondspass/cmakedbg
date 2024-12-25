@@ -1,10 +1,18 @@
 import socket
+import sys 
+import pathlib
 import json
-import time
 from pprint import pprint
+
+# importing readline so input() will do better editing
+# linter will warn readline is imported but unused
+import readline
+
 HOST = "/tmp/cmake-blah"
 SEQ = 0
-BRKPTNUM = 0
+ALREADY_RUNNING = False
+CMAKE_VARIABLES = {}
+TOP_LEVEL_VARS = 0
 
 
 def initialize():
@@ -12,8 +20,8 @@ def initialize():
         "command": 'initialize',
         'arguments': {
             'adapterID': "blah",
-            'clientID': 'vimspector',
-            'clientName': 'vimspector',
+            'clientID': 'cmakecmdlinedebugger',
+            'clientName': 'cmakecmdlinedebugger',
             'linesStartAt1': True,
             'columnsStartAt1': True,
             'locale': 'en_GB',
@@ -23,18 +31,56 @@ def initialize():
     return payload
 
 
-def set_breakpoints():
+def send_request(s, request_func, *args):
+    payload = request_func(*args)
+    request_bytes = create_request(payload)
+
+    print(request_bytes)
+    try:
+        s.sendall(request_bytes)
+    except Exception as e:
+        raise e
+
+
+def create_request(payload):
+    global SEQ
+    SEQ = SEQ + 1
+    payload['seq'] = SEQ
+    payload['type'] = 'request'
+    payloadstr = json.dumps(payload)
+    request = f"""Content-Length: {len(payloadstr)}\r
+\r
+{payloadstr}"""
+    request_bytes = request.encode()
+    return request_bytes
+
+
+def recv_response(s, response):
+    while b"\r\n\r\n" not in response:
+        response = response + s.recv(4096)
+    header, response = response.split(b"\r\n\r\n", maxsplit=1)
+    header = header.decode()
+    size = int(header.split()[1])  # geting content lenght value
+    while len(response) < size:
+        response = response + s.recv(4096)
+    body, response = response[:size], response[size:]
+    body_json = json.loads(body.decode())
+    print(header)
+    pprint(body_json)
+    print("", flush=True)
+    return body_json, response
+
+
+def set_breakpoints(filepath, lineno):
     payload = {
         'command': 'setBreakpoints',
         'arguments': {
             'source': {
-                'name': 'main CMakeLists.txt',
-                'path': '/lustre/orion/stf007/scratch/subil/inbox/olcf20750/samplebugproject/CMakeLists.txt'
+                'name': filepath,
+                'path': filepath
             },
             'breakpoints': [
-                {'line': 5},
-                {'line': 7},
-                {'line': 9},
+                {'line': lineno},
             ]
         }
     }
@@ -85,99 +131,122 @@ def configuration_done():
     return payload
 
 
-def create_request(payload):
-    global SEQ
-    SEQ = SEQ + 1
-    payload['seq'] = SEQ
-    payload['type'] = 'request'
-    payloadstr = json.dumps(payload)
-    request = f"""Content-Length: {len(payloadstr)}\r
-\r
-{payloadstr}"""
-    request_bytes = request.encode()
-    return request_bytes
+def validate_filepath_and_linenum(filepath_and_linenum):
+    filepathsplit = filepath_and_linenum.split(":")
+    if len(filepathsplit) > 2:
+        raise RuntimeWarning(
+            "User error: breakpoint should be of the form '/path/to/file:linenumber'")
+    if len(filepathsplit) == 2:
+        try:
+            filepath, linenum = filepathsplit[0], int(filepathsplit[1])
+        except ValueError:
+            raise ValueError(f"User error: line number is not a valid integer in {filepath_and_linenum}")
+    else:
+        filepath, linenum = filepathsplit[0], 1
+    filepath = pathlib.Path(filepath).expanduser().resolve()
+    if filepath.is_file():
+        return str(filepath), linenum
+    else:
+        raise RuntimeWarning(f"User error: {filepath} is not a valid file")
 
 
-with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
-    s.connect(HOST)
-
-    payload = initialize()
-    request_bytes = create_request(payload)
-
-    print(request_bytes)
-    s.sendall(request_bytes)
-
-    response = b""
-    response = response + s.recv(4096)
+def process_user_input():
+    global ALREADY_RUNNING
     while True:
-        header, response = response.split(b"\r\n\r\n", maxsplit=1)
-        header = header.decode()
-        size = int(header.split()[1])  # geting content lenght value
-        while len(response) < size:
-            response = response + s.recv(4096)
-        body, response = response[:size], response[size:]
-        body_json = json.loads(body.decode())
-        print(header)
-        pprint(body_json)
-        print("Length: ", len(body))
-        print("", flush=True)
+        try:
+            user_input = input(">>> ").strip().split()
+        except KeyboardInterrupt:
+            print("\nKeyboardInterrupt")
+            continue
+        except EOFError:
+            print()
+            sys.exit(0)
 
-        match body_json:
-            case {"type": "response", "command": "initialize"}:
-                pass
-            case {"type": "event", "event": "initialized"}:
-                payload = set_breakpoints()
-                request_bytes = create_request(payload)
-                print(request_bytes)
-                s.sendall(request_bytes)
-            case {"type": "response", "command": "setBreakpoints"}:
-                payload = configuration_done()
-                request_bytes = create_request(payload)
-                print(request_bytes)
-                s.sendall(request_bytes)
-            case {"type": "response", "command": "configurationDone"}:
-                pass
-            case {"type": "event", "event": "stopped"}:
-                BRKPTNUM += 1
-                payload = stacktrace()
-                request_bytes = create_request(payload)
-                print(request_bytes)
-                s.sendall(request_bytes)
-            case {"type": "response", "command": "stackTrace",
-                  "body": {"stackFrames": [{"id": frame_id}]}}:
-                payload = scopes(frame_id)
-                request_bytes = create_request(payload)
-                print(request_bytes)
-                s.sendall(request_bytes)
-            case {"type": "response", "command": "scopes",
-                  "body": {"scopes": [{"variablesReference": var_ref}]}}:
-                payload = variables(var_ref)
-                request_bytes = create_request(payload)
-                print(request_bytes)
-                s.sendall(request_bytes)
-            case {"type": "response", "command": "variables"}:
-                toprint = []
-                for variable in body_json['body']['variables']:
-                    toprint.append(f"{variable['name']} = {variable['value']}\n")
-                    if variable['name'] in ['CacheVariables', 'Directories', 'Locals']:
-                        payload = variables(variable['variablesReference'])
-                        request_bytes = create_request(payload)
-                        print(request_bytes)
-                        s.sendall(request_bytes)
-                        print(f"Requesting variables: {variable['name']}")
-                        next_br = input("Next breakpoint? (y or n): ")
-                        if next_br == 'y':
-                            payload = dbg_continue()
-                            request_bytes = create_request(payload)
-                            print(request_bytes)
-                            s.sendall(request_bytes)
+        match user_input:
+            case ["set", "breakpoint" | "br", filepath_and_linenum]:
+                try:
+                    filepath, linenum = validate_filepath_and_linenum(filepath_and_linenum)
+                except RuntimeWarning as r:
+                    print(r)
+                    continue
+                except ValueError as e:
+                    print(e)
+                    continue
 
-                with open(f"variables_break{BRKPTNUM}.txt", 'a') as varfile:
-                    varfile.writelines(toprint)
-            case _:  # Default case if no other case is matched
-                # Consider logging this for debugging.
-                print(f"Unhandled message type: {body_json}")
-                pass
+                return set_breakpoints, [filepath, linenum]
+            case ["run" | "r"]:
+                if ALREADY_RUNNING:
+                    print("CMake already started running. Ignoring command.")
+                else:
+                    return configuration_done, []
+            case ["continue" | "c"]:
+                if ALREADY_RUNNING:
+                    return dbg_continue, []
+                else:
+                    print("CMake not running. Use 'run' command to start running")
+            case ["variables" | "vars"]:
+                if not ALREADY_RUNNING:
+                    print("CMake build is not running. Cannot print any variables")
+                    continue
+                return stacktrace, []
+            case []:
+                continue
+            case _:
+                print("Unknown command")
 
-        while b"\r\n\r\n" not in response:
-            response = response + s.recv(4096)
+
+def main():
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+        s.connect(HOST)
+        response = b""
+
+        send_request(s, initialize)
+        global CMAKE_VARIABLES
+
+        while True:
+            body_json, response = recv_response(s, response)
+
+            match body_json:
+                case {"type": "response", "command": "initialize"}:
+                    pass
+                case {"type": "event", "event": "initialized"}:
+                    request_func, args = process_user_input()
+                    send_request(s, request_func, *args)
+                case {"type": "response", "command": "setBreakpoints"}:
+                    request_func, args = process_user_input()
+                    send_request(s, request_func, *args)
+                case {"type": "response", "command": "configurationDone"}:
+                    global ALREADY_RUNNING
+                    ALREADY_RUNNING = True
+                    pass
+                case {"type": "event", "event": "stopped"}:
+                    request_func, args = process_user_input()
+                    send_request(s, request_func, *args)
+                case {"type": "response", "command": "stackTrace",
+                      "body": {"stackFrames": [{"id": frame_id}]}}:
+                    send_request(s, scopes, frame_id)
+                case {"type": "response", "command": "scopes",
+                      "body": {"scopes": [{"variablesReference": var_ref}]}}:
+                    send_request(s, variables, var_ref)
+                case {"type": "response", "command": "variables"}:
+                    global TOP_LEVEL_VARS
+                    for variable in body_json['body']['variables']:
+                        CMAKE_VARIABLES[variable['name']] = variable['value']
+                        if variable['name'] in ['CacheVariables', 'Directories', 'Locals']:
+                            TOP_LEVEL_VARS = TOP_LEVEL_VARS + 1
+                            send_request(s, variables, variable['variablesReference'])
+                    if TOP_LEVEL_VARS > 0:
+                        TOP_LEVEL_VARS = TOP_LEVEL_VARS - 1
+                        continue
+                    pprint(CMAKE_VARIABLES)
+                    request_func, args = process_user_input()
+                    send_request(s, request_func, *args)
+
+                case _:  # Default case if no other case is matched
+                    # Consider logging this for debugging.
+                    print(f"Unhandled message type: {body_json}")
+                    pass
+
+
+if __name__ == '__main__':
+    main()

@@ -1,0 +1,8 @@
+cmake_minimum_required(VERSION 3.27)
+project (MY_PROJECT C)
+# find_package(MPI REQUIRED COMPONENTS C)
+message(STATUS “Configuring src1”)
+add_subdirectory(src1)
+message(STATUS “Configuring src2”)
+add_subdirectory(src2)
+message(STATUS “Configured src2”)
