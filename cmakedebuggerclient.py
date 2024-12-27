@@ -189,6 +189,13 @@ def process_user_input():
                     print("CMake build is not running. Cannot print any variables")
                     continue
                 return stacktrace, []
+            case ["get", "variable" | "var" , varname ]:
+                pass
+            case ["quit" | "q" ]:
+                # TODO: we should probably change this to something that cleans up
+                # the socket but this will do for now
+                print()
+                sys.exit(0)
             case []:
                 continue
             case _:
