@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "cmakedbg"
+version = "0.1.0"
+description = "A GDB like terminal interface for CMake's debugger, interfacing with CMake's Debug Adapter Protocol"
+authors = ["Your Name <you@example.com>"]
+license = "MIT License"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+
+
+
+[tool.poetry.group.test.dependencies]
+pytest = "^8.3.4"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

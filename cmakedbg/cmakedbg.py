@@ -1,8 +1,12 @@
 import socket
-import sys 
+import uuid
+import sys
 import pathlib
 import json
 from pprint import pprint
+from dataclasses import dataclass
+import dataclasses
+
 
 # importing readline so input() will do better editing
 # linter will warn readline is imported but unused
@@ -12,29 +16,26 @@ HOST = "/tmp/cmake-blah"
 SEQ = 0
 ALREADY_RUNNING = False
 CMAKE_VARIABLES = {}
+SINGLE_VARIABLE = None
 TOP_LEVEL_VARS = 0
 
 
-def initialize():
-    payload = {
-        "command": 'initialize',
-        'arguments': {
-            'adapterID': "blah",
-            'clientID': 'cmakecmdlinedebugger',
-            'clientName': 'cmakecmdlinedebugger',
-            'linesStartAt1': True,
-            'columnsStartAt1': True,
-            'locale': 'en_GB',
-            'pathFormat': 'path',
-        }
-    }
-    return payload
+@dataclass
+class DebugState():
+    host: str = f"/tmp/cmake-{uuid.uuid4()}"
+    seq: int = 0
+    already_running: bool = False
+    cmake_variables: dict = dataclasses.field(default_factory=dict)
+    top_level_vars: int = 0
+
+
 
 
 def send_request(s, request_func, *args):
     payload = request_func(*args)
     request_bytes = create_request(payload)
 
+    # change this to log instead
     print(request_bytes)
     try:
         s.sendall(request_bytes)
@@ -70,6 +71,20 @@ def recv_response(s, response):
     print("", flush=True)
     return body_json, response
 
+def initialize():
+    payload = {
+        "command": 'initialize',
+        'arguments': {
+            'adapterID': "blah",
+            'clientID': 'cmakecmdlinedebugger',
+            'clientName': 'cmakecmdlinedebugger',
+            'linesStartAt1': True,
+            'columnsStartAt1': True,
+            'locale': 'en_US',
+            'pathFormat': 'path',
+        }
+    }
+    return payload
 
 def set_breakpoints(filepath, lineno):
     payload = {
@@ -140,7 +155,8 @@ def validate_filepath_and_linenum(filepath_and_linenum):
         try:
             filepath, linenum = filepathsplit[0], int(filepathsplit[1])
         except ValueError:
-            raise ValueError(f"User error: line number is not a valid integer in {filepath_and_linenum}")
+            raise ValueError(f"User error: line number is not a valid integer in {
+                             filepath_and_linenum}")
     else:
         filepath, linenum = filepathsplit[0], 1
     filepath = pathlib.Path(filepath).expanduser().resolve()
@@ -150,8 +166,14 @@ def validate_filepath_and_linenum(filepath_and_linenum):
         raise RuntimeWarning(f"User error: {filepath} is not a valid file")
 
 
+def dbg_quit():
+    print()
+    sys.exit(0)
+
+
 def process_user_input():
     global ALREADY_RUNNING
+    global SINGLE_VARIABLE
     while True:
         try:
             user_input = input(">>> ").strip().split()
@@ -159,8 +181,7 @@ def process_user_input():
             print("\nKeyboardInterrupt")
             continue
         except EOFError:
-            print()
-            sys.exit(0)
+            dbg_quit()
 
         match user_input:
             case ["set", "breakpoint" | "br", filepath_and_linenum]:
@@ -189,13 +210,14 @@ def process_user_input():
                     print("CMake build is not running. Cannot print any variables")
                     continue
                 return stacktrace, []
-            case ["get", "variable" | "var" , varname ]:
+            case ["get", "variable" | "var", varname]:
+                SINGLE_VARIABLE = varname
+                return stacktrace, []
                 pass
-            case ["quit" | "q" ]:
+            case ["quit" | "q"]:
                 # TODO: we should probably change this to something that cleans up
                 # the socket but this will do for now
-                print()
-                sys.exit(0)
+                dbg_quit()
             case []:
                 continue
             case _:
@@ -209,6 +231,7 @@ def main():
 
         send_request(s, initialize)
         global CMAKE_VARIABLES
+        global SINGLE_VARIABLE
 
         while True:
             body_json, response = recv_response(s, response)
@@ -245,7 +268,14 @@ def main():
                     if TOP_LEVEL_VARS > 0:
                         TOP_LEVEL_VARS = TOP_LEVEL_VARS - 1
                         continue
-                    pprint(CMAKE_VARIABLES)
+                    if SINGLE_VARIABLE is not None:
+                        if SINGLE_VARIABLE in CMAKE_VARIABLES:
+                            print(f"{SINGLE_VARIABLE} = {CMAKE_VARIABLES[SINGLE_VARIABLE]}")
+                        else:
+                            print(f"{SINGLE_VARIABLE} does not exist")
+                        SINGLE_VARIABLE = None
+                    else:
+                        pprint(CMAKE_VARIABLES)
                     request_func, args = process_user_input()
                     send_request(s, request_func, *args)
 
