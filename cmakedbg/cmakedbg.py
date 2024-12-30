@@ -29,8 +29,6 @@ class DebugState():
     top_level_vars: int = 0
 
 
-
-
 def send_request(s, request_func, *args):
     payload = request_func(*args)
     request_bytes = create_request(payload)
@@ -71,6 +69,7 @@ def recv_response(s, response):
     print("", flush=True)
     return body_json, response
 
+
 def initialize():
     payload = {
         "command": 'initialize',
@@ -85,6 +84,7 @@ def initialize():
         }
     }
     return payload
+
 
 def set_breakpoints(filepath, lineno):
     payload = {
