@@ -1,6 +1,9 @@
 import socket
+import time
+import shutil
 import uuid
 import sys
+import subprocess
 import pathlib
 import json
 from pprint import pprint
@@ -21,6 +24,7 @@ TOP_LEVEL_VARS = 0
 
 @dataclass
 class DebuggerState():
+    cmake_process_handle: subprocess.Popen = None
     host: str = f"/tmp/cmake-{uuid.uuid4()}"
     seq: int = 0
     already_running: bool = False
@@ -166,8 +170,9 @@ def validate_filepath_and_linenum(filepath_and_linenum: str):
         raise RuntimeWarning(f"User error: {filepath} is not a valid file")
 
 
-def dbg_quit():
+def dbg_quit(debugger_state: DebuggerState):
     print()
+    debugger_state.cmake_process_handle.kill()
     sys.exit(0)
 
 
@@ -179,7 +184,7 @@ def process_user_input(debugger_state):
             print("\nKeyboardInterrupt")
             continue
         except EOFError:
-            dbg_quit()
+            dbg_quit(debugger_state)
 
         match user_input:
             case ["set", "breakpoint" | "br", filepath_and_linenum]:
@@ -202,10 +207,11 @@ def process_user_input(debugger_state):
                 if debugger_state.already_running:
                     return dbg_continue, []
                 else:
-                    print("CMake not running. Use 'run' command to start running")
+                    print("CMake build has not started running. Use 'run' command to start running")
             case ["variables" | "vars"]:
                 if not debugger_state.already_running:
-                    print("CMake build is not running. Cannot print any variables")
+                    print(
+                        "CMake build has not started running. Cannot print any variables yet. Use 'run' command to start running")
                     continue
                 return stacktrace, []
             case ["get", "variable" | "var", varname]:
@@ -214,18 +220,46 @@ def process_user_input(debugger_state):
             case ["quit" | "q"]:
                 # TODO: we should probably change this to something that cleans up
                 # the socket but this will do for now
-                dbg_quit()
+                dbg_quit(debugger_state)
             case []:
                 continue
             case _:
                 print("Unknown command")
 
 
+def print_help():
+    print("Usage: cmakedebug cmake <options>")
+
+
+def launch_cmake(cmd: list, pipe_host):
+
+    if len(cmd) == 0:
+        print_help()
+        sys.exit(1)
+    if "cmake" not in cmd[0]:
+        print("Invalid format")
+        print_help()
+        sys.exit(1)
+    if shutil.which(cmd[0]) is None:
+        print("cmake is not in your PATH. Make sure cmake is installed and in your PATH")
+        sys.exit(1)
+    cmd[0] = shutil.which(cmd[0])
+    cmd.insert(1, f"--debugger-pipe {pipe_host}")
+    cmd.insert(1, "--debugger")
+    print(f"cmd: {cmd}")
+    cmd_handle = subprocess.Popen(cmd)
+    time.sleep(0.5)
+    return cmd_handle
+
+
 def main():
     debugger_state = DebuggerState()
+    debugger_state.cmake_process_handle = launch_cmake(sys.argv[1:], debugger_state.host)
+    print(debugger_state.cmake_process_handle)
+
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
 
-        s.connect(HOST)
+        s.connect(debugger_state.host)
         response = b""
 
         send_request(s, initialize)

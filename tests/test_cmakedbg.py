@@ -1,4 +1,5 @@
 from cmakedbg import cmakedbg
+import os
 from pathlib import Path
 import time
 import shutil
@@ -54,10 +55,10 @@ def cmake_background_process(debugger_state):
     if build_dir.is_dir():
         shutil.rmtree(build_dir)
     build_dir.mkdir()
-    with Popen(["cmake", "--debugger", f"--debugger-pipe {debugger_state.host}", ".."], cwd=build_dir) as bg_process:
-        time.sleep(0.5)
-        yield bg_process
-        bg_process.kill()
+    os.chdir(str(build_dir))
+    bg_process = cmakedbg.launch_cmake(["cmake", ".."], debugger_state.host)
+    yield bg_process
+    bg_process.kill()
 
 
 @pytest.fixture(scope="session")
@@ -78,10 +79,12 @@ def test_create_request():
     assert payload['type'] == 'request'
 
 
-def test_send_request(debugger_state, cmake_dap_socket):
+def test_send_request(debugger_state, cmake_dap_socket, cmake_background_process):
+    debugger_state.cmake_process_handle = cmake_background_process
     cmakedbg.send_request(cmake_dap_socket, cmakedbg.initialize)
     body_json, response = cmakedbg.recv_response(cmake_dap_socket, b"")
     assert body_json["type"] == "response"
     assert body_json["command"] == "initialize"
     body_json, response = cmakedbg.recv_response(cmake_dap_socket, response)
     assert (body_json["type"], body_json["event"]) == ("event", "initialized")
+
