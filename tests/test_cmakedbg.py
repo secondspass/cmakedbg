@@ -9,17 +9,32 @@ import json
 
 
 def test_validate_filepath_and_linenum():
-    pass
+    vfl = cmakedbg.validate_filepath_and_linenum
+    filename = "./tests/cmake-examples-master/08-mpi/CMakeLists.txt"
+    fullpath = str(Path(filename).expanduser().resolve())
+
+    # improper format
+    with pytest.raises(RuntimeWarning):
+        vfl(f"{filename}:12:34")
+    # fake line numbers
+    for fakelinenumber in ["asdg", "13sgh"]:
+        with pytest.raises(ValueError):
+            vfl(f"{filename}:{fakelinenumber}")
+    # non existent file
+    with pytest.raises(RuntimeWarning):
+        vfl("./sdfgdstyw34")
+    assert (fullpath, 1) == vfl(f"{filename}")
+    assert (fullpath, 23) == vfl(f"{filename}:23")
 
 
-def test_DebugState():
-    debug_state = cmakedbg.DebugState()
-    assert debug_state.seq == 0
-    assert len(debug_state.host.split('-')) == 6
-    assert "/tmp/cmake" in debug_state.host
-    assert debug_state.already_running is False
-    assert debug_state.cmake_variables == {}
-    assert debug_state.top_level_vars == 0
+def test_debugger_state():
+    debugger_state = cmakedbg.DebuggerState()
+    assert debugger_state.seq == 0
+    assert len(debugger_state.host.split('-')) == 6
+    assert "/tmp/cmake" in debugger_state.host
+    assert debugger_state.already_running is False
+    assert debugger_state.cmake_variables == {}
+    assert debugger_state.top_level_vars == 0
 
 
 def test_initialize():
@@ -28,27 +43,27 @@ def test_initialize():
 
 
 @pytest.fixture(scope='session')
-def debug_state(scope="session"):
-    return cmakedbg.DebugState()
+def debugger_state(scope="session"):
+    return cmakedbg.DebuggerState()
 
 
 @pytest.fixture(scope='session')
-def cmake_background_process(debug_state):
+def cmake_background_process(debugger_state):
     cmake_dir = Path("./tests/cmake-examples-master/08-mpi").resolve()
     build_dir = cmake_dir.joinpath("build").resolve()
     if build_dir.is_dir():
         shutil.rmtree(build_dir)
     build_dir.mkdir()
-    with Popen(["cmake", "--debugger", f"--debugger-pipe {debug_state.host}", ".."], cwd=build_dir) as bg_process:
+    with Popen(["cmake", "--debugger", f"--debugger-pipe {debugger_state.host}", ".."], cwd=build_dir) as bg_process:
         time.sleep(0.5)
         yield bg_process
         bg_process.kill()
 
 
 @pytest.fixture(scope="session")
-def cmake_dap_socket(debug_state, cmake_background_process):
+def cmake_dap_socket(debugger_state, cmake_background_process):
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
-        s.connect(debug_state.host)
+        s.connect(debugger_state.host)
         yield s
 
 
@@ -63,12 +78,10 @@ def test_create_request():
     assert payload['type'] == 'request'
 
 
-def test_send_request(debug_state, cmake_dap_socket):
+def test_send_request(debugger_state, cmake_dap_socket):
     cmakedbg.send_request(cmake_dap_socket, cmakedbg.initialize)
     body_json, response = cmakedbg.recv_response(cmake_dap_socket, b"")
     assert body_json["type"] == "response"
     assert body_json["command"] == "initialize"
-    body_json, response = cmakedbg.recv_response(cmake_dap_socket, response) 
+    body_json, response = cmakedbg.recv_response(cmake_dap_socket, response)
     assert (body_json["type"], body_json["event"]) == ("event", "initialized")
-  #  assert body_json["event"] == "initialized"
-    pass

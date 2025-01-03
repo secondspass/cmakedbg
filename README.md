@@ -1,5 +1,6 @@
 ## TODOs:
 - [x] implement printing out individual variables
+- [ ] launch cmake directly from debugger
 - [ ] show listing at point
 - [ ] implementing 'next' (step over) and 'step into'
 - [ ] write help output
@@ -7,3 +8,4 @@
 - [ ] quit - with ctrl+d and with command 'quit'
 - [ ] add tests
 - [ ] (write tests first) change globals to a dataclass 
+- [ ] add types

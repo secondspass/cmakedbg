@@ -15,17 +15,17 @@ import readline
 HOST = "/tmp/cmake-blah"
 SEQ = 0
 ALREADY_RUNNING = False
-CMAKE_VARIABLES = {}
 SINGLE_VARIABLE = None
 TOP_LEVEL_VARS = 0
 
 
 @dataclass
-class DebugState():
+class DebuggerState():
     host: str = f"/tmp/cmake-{uuid.uuid4()}"
     seq: int = 0
     already_running: bool = False
     cmake_variables: dict = dataclasses.field(default_factory=dict)
+    single_variable: str = ""
     top_level_vars: int = 0
 
 
@@ -146,7 +146,7 @@ def configuration_done():
     return payload
 
 
-def validate_filepath_and_linenum(filepath_and_linenum):
+def validate_filepath_and_linenum(filepath_and_linenum: str):
     filepathsplit = filepath_and_linenum.split(":")
     if len(filepathsplit) > 2:
         raise RuntimeWarning(
@@ -171,9 +171,7 @@ def dbg_quit():
     sys.exit(0)
 
 
-def process_user_input():
-    global ALREADY_RUNNING
-    global SINGLE_VARIABLE
+def process_user_input(debugger_state):
     while True:
         try:
             user_input = input(">>> ").strip().split()
@@ -196,24 +194,23 @@ def process_user_input():
 
                 return set_breakpoints, [filepath, linenum]
             case ["run" | "r"]:
-                if ALREADY_RUNNING:
+                if debugger_state.already_running:
                     print("CMake already started running. Ignoring command.")
                 else:
                     return configuration_done, []
             case ["continue" | "c"]:
-                if ALREADY_RUNNING:
+                if debugger_state.already_running:
                     return dbg_continue, []
                 else:
                     print("CMake not running. Use 'run' command to start running")
             case ["variables" | "vars"]:
-                if not ALREADY_RUNNING:
+                if not debugger_state.already_running:
                     print("CMake build is not running. Cannot print any variables")
                     continue
                 return stacktrace, []
             case ["get", "variable" | "var", varname]:
-                SINGLE_VARIABLE = varname
+                debugger_state.single_variable = varname
                 return stacktrace, []
-                pass
             case ["quit" | "q"]:
                 # TODO: we should probably change this to something that cleans up
                 # the socket but this will do for now
@@ -225,13 +222,13 @@ def process_user_input():
 
 
 def main():
+    debugger_state = DebuggerState()
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+
         s.connect(HOST)
         response = b""
 
         send_request(s, initialize)
-        global CMAKE_VARIABLES
-        global SINGLE_VARIABLE
 
         while True:
             body_json, response = recv_response(s, response)
@@ -240,17 +237,15 @@ def main():
                 case {"type": "response", "command": "initialize"}:
                     pass
                 case {"type": "event", "event": "initialized"}:
-                    request_func, args = process_user_input()
+                    request_func, args = process_user_input(debugger_state)
                     send_request(s, request_func, *args)
                 case {"type": "response", "command": "setBreakpoints"}:
-                    request_func, args = process_user_input()
+                    request_func, args = process_user_input(debugger_state)
                     send_request(s, request_func, *args)
                 case {"type": "response", "command": "configurationDone"}:
-                    global ALREADY_RUNNING
-                    ALREADY_RUNNING = True
-                    pass
+                    debugger_state.already_running = True
                 case {"type": "event", "event": "stopped"}:
-                    request_func, args = process_user_input()
+                    request_func, args = process_user_input(debugger_state)
                     send_request(s, request_func, *args)
                 case {"type": "response", "command": "stackTrace",
                       "body": {"stackFrames": [{"id": frame_id}]}}:
@@ -259,24 +254,24 @@ def main():
                       "body": {"scopes": [{"variablesReference": var_ref}]}}:
                     send_request(s, variables, var_ref)
                 case {"type": "response", "command": "variables"}:
-                    global TOP_LEVEL_VARS
                     for variable in body_json['body']['variables']:
-                        CMAKE_VARIABLES[variable['name']] = variable['value']
+                        debugger_state.cmake_variables[variable['name']] = variable['value']
                         if variable['name'] in ['CacheVariables', 'Directories', 'Locals']:
-                            TOP_LEVEL_VARS = TOP_LEVEL_VARS + 1
+                            debugger_state.top_level_vars = debugger_state.top_level_vars + 1
                             send_request(s, variables, variable['variablesReference'])
-                    if TOP_LEVEL_VARS > 0:
-                        TOP_LEVEL_VARS = TOP_LEVEL_VARS - 1
+                    if debugger_state.top_level_vars > 0:
+                        debugger_state.top_level_vars = debugger_state.top_level_vars - 1
                         continue
-                    if SINGLE_VARIABLE is not None:
-                        if SINGLE_VARIABLE in CMAKE_VARIABLES:
-                            print(f"{SINGLE_VARIABLE} = {CMAKE_VARIABLES[SINGLE_VARIABLE]}")
+                    if debugger_state.single_variable:
+                        if debugger_state.single_variable in debugger_state.cmake_variables:
+                            print(f"{debugger_state.single_variable} = {
+                                  debugger_state.cmake_variables[debugger_state.single_variable]}")
                         else:
-                            print(f"{SINGLE_VARIABLE} does not exist")
-                        SINGLE_VARIABLE = None
+                            print(f"{debugger_state.single_variable} does not exist")
+                        debugger_state.single_variable = ""
                     else:
-                        pprint(CMAKE_VARIABLES)
-                    request_func, args = process_user_input()
+                        pprint(debugger_state.cmake_variables)
+                    request_func, args = process_user_input(debugger_state)
                     send_request(s, request_func, *args)
 
                 case _:  # Default case if no other case is matched
