@@ -43,14 +43,15 @@ def test_initialize():
     assert initi['command'] == 'initialize'
 
 
-@pytest.fixture(scope='session')
-def debugger_state(scope="session"):
+@pytest.fixture(scope='class')
+def debugger_state():
     return cmakedbg.DebuggerState()
 
 
-@pytest.fixture(scope='session')
+@pytest.fixture(scope='class')
 def cmake_background_process(debugger_state):
     cmake_dir = Path("./tests/cmake-examples-master/08-mpi").resolve()
+    curr_dir = Path(".").resolve()
     build_dir = cmake_dir.joinpath("build").resolve()
     if build_dir.is_dir():
         shutil.rmtree(build_dir)
@@ -59,9 +60,10 @@ def cmake_background_process(debugger_state):
     bg_process = cmakedbg.launch_cmake(["cmake", ".."], debugger_state.host)
     yield bg_process
     bg_process.kill()
+    os.chdir(str(curr_dir))
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope='class')
 def cmake_dap_socket(debugger_state, cmake_background_process):
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
         s.connect(debugger_state.host)
@@ -83,8 +85,42 @@ def test_send_request(debugger_state, cmake_dap_socket, cmake_background_process
     debugger_state.cmake_process_handle = cmake_background_process
     cmakedbg.send_request(cmake_dap_socket, cmakedbg.initialize)
     body_json, response = cmakedbg.recv_response(cmake_dap_socket, b"")
-    assert body_json["type"] == "response"
-    assert body_json["command"] == "initialize"
+    assert (body_json["type"], body_json["command"]) == ("response", "initialize")
     body_json, response = cmakedbg.recv_response(cmake_dap_socket, response)
     assert (body_json["type"], body_json["event"]) == ("event", "initialized")
+
+
+# each function executes in sequence
+class TestCommands:
+    def test_initialize(debugger_state, cmake_dap_socket, cmake_background_process):
+        debugger_state.cmake_process_handle = cmake_background_process
+        cmakedbg.send_request(cmake_dap_socket, cmakedbg.initialize)
+        body_json, response = cmakedbg.recv_response(cmake_dap_socket, b"")
+        assert (body_json["type"], body_json["command"]) == ("response", "initialize")
+        body_json, response = cmakedbg.recv_response(cmake_dap_socket, response)
+        assert (body_json["type"], body_json["event"]) == ("event", "initialized")
+
+    def test_set_breakpoints(debugger_state, cmake_dap_socket):
+        cmakedbg.send_request(cmake_dap_socket, cmakedbg.set_breakpoints,
+                              "./cmake-examples-master/08-mpi/CMakeLists.txt", 6)
+        body_json, response = cmakedbg.recv_response(cmake_dap_socket, b"")
+        assert (body_json["type"], body_json["command"]) == ("response", "setBreakpoints")
+
+    def test_configuration_done(debugger_state, cmake_dap_socket):
+        cmakedbg.send_request(cmake_dap_socket, cmakedbg.configuration_done)
+        body_json, response = cmakedbg.recv_response(cmake_dap_socket, b"")
+        assert (body_json["type"], body_json["command"]) == ("response", "configurationDone")
+
+    def test_stop_at_breakpoint(debugger_state, cmake_dap_socket):
+        # TODO: write test
+        body_json, response = cmakedbg.recv_response(cmake_dap_socket, b"")
+        assert (body_json["type"], body_json["event"]) == ("event", "stopped")
+
+    def test_get_breakpoints(debugger_state, cmake_dap_socket):
+        # TODO: add test that will list breakpoints
+        pass
+
+
+
+
 

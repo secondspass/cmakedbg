@@ -10,7 +10,6 @@ from pprint import pprint
 from dataclasses import dataclass
 import dataclasses
 
-
 # importing readline so input() will do better editing
 # linter will warn readline is imported but unused
 import readline
@@ -37,7 +36,7 @@ def send_request(s, request_func, *args):
     payload = request_func(*args)
     request_bytes = create_request(payload)
 
-    # change this to log instead
+    # TODO: change this to log instead
     print(request_bytes)
     try:
         s.sendall(request_bytes)
@@ -74,6 +73,7 @@ def recv_response(s, response):
     return body_json, response
 
 
+# debugger commands
 def initialize():
     payload = {
         "command": 'initialize',
@@ -102,6 +102,14 @@ def set_breakpoints(filepath, lineno):
                 {'line': lineno},
             ]
         }
+    }
+    return payload
+
+
+def get_breakpoints():
+    payload = {
+        'command': 'breakpointLocations',
+        'arguments': {},
     }
     return payload
 
@@ -159,8 +167,8 @@ def validate_filepath_and_linenum(filepath_and_linenum: str):
         try:
             filepath, linenum = filepathsplit[0], int(filepathsplit[1])
         except ValueError:
-            raise ValueError(f"User error: line number is not a valid integer in {
-                             filepath_and_linenum}")
+            raise ValueError(
+                f"User error: line number is not a valid integer in {filepath_and_linenum}")
     else:
         filepath, linenum = filepathsplit[0], 1
     filepath = pathlib.Path(filepath).expanduser().resolve()
@@ -198,6 +206,8 @@ def process_user_input(debugger_state):
                     continue
 
                 return set_breakpoints, [filepath, linenum]
+            case ["get", "breakpoint" | "br"]:
+                return get_breakpoints, []
             case ["run" | "r"]:
                 if debugger_state.already_running:
                     print("CMake already started running. Ignoring command.")
@@ -254,12 +264,13 @@ def launch_cmake(cmd: list, pipe_host):
 
 def main():
     debugger_state = DebuggerState()
-    debugger_state.cmake_process_handle = launch_cmake(sys.argv[1:], debugger_state.host)
-    print(debugger_state.cmake_process_handle)
+    # debugger_state.cmake_process_handle = launch_cmake(sys.argv[1:], debugger_state.host)
+    # print(debugger_state.cmake_process_handle)
 
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
 
-        s.connect(debugger_state.host)
+        # s.connect(debugger_state.host)
+        s.connect(HOST)
         response = b""
 
         send_request(s, initialize)
@@ -298,8 +309,8 @@ def main():
                         continue
                     if debugger_state.single_variable:
                         if debugger_state.single_variable in debugger_state.cmake_variables:
-                            print(f"{debugger_state.single_variable} = {
-                                  debugger_state.cmake_variables[debugger_state.single_variable]}")
+                            print(
+                                f"{debugger_state.single_variable}={debugger_state.cmake_variables[debugger_state.single_variable]}")
                         else:
                             print(f"{debugger_state.single_variable} does not exist")
                         debugger_state.single_variable = ""
