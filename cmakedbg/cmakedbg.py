@@ -23,6 +23,7 @@ TOP_LEVEL_VARS = 0
 
 @dataclass
 class DebuggerState():
+    response: bytes = b""
     cmake_process_handle: subprocess.Popen = None
     host: str = f"/tmp/cmake-{uuid.uuid4()}"
     seq: int = 0
@@ -264,19 +265,18 @@ def launch_cmake(cmd: list, pipe_host):
 
 def main():
     debugger_state = DebuggerState()
-    # debugger_state.cmake_process_handle = launch_cmake(sys.argv[1:], debugger_state.host)
-    # print(debugger_state.cmake_process_handle)
+    debugger_state.cmake_process_handle = launch_cmake(sys.argv[1:], debugger_state.host)
+    print(debugger_state.cmake_process_handle)
 
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
 
-        # s.connect(debugger_state.host)
-        s.connect(HOST)
-        response = b""
+        s.connect(debugger_state.host)
+        debugger_state.response = b""
 
         send_request(s, initialize)
 
         while True:
-            body_json, response = recv_response(s, response)
+            body_json, debugger_state.response = recv_response(s, debugger_state.response)
 
             match body_json:
                 case {"type": "response", "command": "initialize"}:
