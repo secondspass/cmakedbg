@@ -119,7 +119,6 @@ class TestCommands:
         assert (body_json["type"], body_json["command"]) == ("response", "configurationDone")
 
     def test_stop_at_breakpoint(self, debugger_state, cmake_dap_socket):
-        # TODO: write test
         body_json, debugger_state.response = cmakedbg.recv_response(cmake_dap_socket,
                                                                     debugger_state.response)
         assert (body_json["type"],
@@ -135,11 +134,11 @@ class TestCommands:
                 body_json["body"]["breakpoint"]["verified"]) == ("event", "breakpoint", "changed", True)
         body_json, debugger_state.response = cmakedbg.recv_response(
             cmake_dap_socket, debugger_state.response)
-        assert (body_json["type"], 
-                body_json["event"], 
+        assert (body_json["type"],
+                body_json["event"],
                 body_json["body"]["reason"]) == ("event",
-                                                                                        "stopped",
-                                                                                        "breakpoint")
+                                                 "stopped",
+                                                 "breakpoint")
 
     def test_get_breakpoints(debugger_state, cmake_dap_socket):
         # TODO: add test that will list breakpoints
