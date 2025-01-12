@@ -1,5 +1,6 @@
 from cmakedbg import cmakedbg
 import os
+from pprint import pprint
 from pathlib import Path
 import time
 import shutil
@@ -93,6 +94,8 @@ def test_send_request(debugger_state, cmake_dap_socket, cmake_background_process
 
 
 # each function executes in sequence
+# TODO: add piece that will run these tests on different CMakeLists from the cmake example
+# collection.
 class TestCommands:
     def test_initialize(self, debugger_state, cmake_dap_socket, cmake_background_process):
         debugger_state.cmake_process_handle = cmake_background_process
@@ -118,7 +121,7 @@ class TestCommands:
             cmake_dap_socket, debugger_state.response)
         assert (body_json["type"], body_json["command"]) == ("response", "configurationDone")
 
-    def test_stop_at_breakpoint(self, debugger_state, cmake_dap_socket):
+    def test_stop_at_first_breakpoint(self, debugger_state, cmake_dap_socket):
         body_json, debugger_state.response = cmakedbg.recv_response(cmake_dap_socket,
                                                                     debugger_state.response)
         assert (body_json["type"],
@@ -140,9 +143,20 @@ class TestCommands:
                                                  "stopped",
                                                  "breakpoint")
 
-    def test_get_breakpoints(debugger_state, cmake_dap_socket):
-        # TODO: add test that will list breakpoints
+    def test_get_breakpoints(self, debugger_state, cmake_dap_socket):
+        # cmake hasn't implemented the 'breakpointLocations' handler yet
         pass
+
+    def test_get_variables(self, debugger_state, cmake_dap_socket):
+        cmakedbg.send_request(cmake_dap_socket, cmakedbg.stacktrace)
+        body_json, debugger_state.response = cmakedbg.recv_response(cmake_dap_socket,
+                                                                    debugger_state.response)
+        # TODO: complete this
+
+    def test_get_source(self, debugger_state, cmake_dap_socket):
+        # TODO: complete this
+        pass
+
 
 
 

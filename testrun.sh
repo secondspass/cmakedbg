@@ -1,5 +1,6 @@
 #!/bin/bash
 
+# quick script to launch the command line interface on a test cmake directory
 currdir=$PWD
 cd ./tests/cmake-examples-master/08-mpi/
 rm -rf build

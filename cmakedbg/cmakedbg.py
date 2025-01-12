@@ -31,8 +31,10 @@ class DebuggerState():
     cmake_variables: dict = dataclasses.field(default_factory=dict)
     single_variable: str = ""
     top_level_vars: int = 0
+    current_line: (str, int) = ("", 0)
 
 
+# TODO: move the payload functions to a different file
 def send_request(s, request_func, *args):
     payload = request_func(*args)
     request_bytes = create_request(payload)
@@ -228,6 +230,10 @@ def process_user_input(debugger_state):
             case ["get", "variable" | "var", varname]:
                 debugger_state.single_variable = varname
                 return stacktrace, []
+            case ["list" | "listing"]:
+                if debugger_state.current_line == ("", 0):
+                    print("CMake build has not started running or hit a breakpoint yet")
+                    continue
             case ["quit" | "q"]:
                 # TODO: we should probably change this to something that cleans up
                 # the socket but this will do for now
@@ -277,7 +283,6 @@ def main():
 
         while True:
             body_json, debugger_state.response = recv_response(s, debugger_state.response)
-
             match body_json:
                 case {"type": "response", "command": "initialize"}:
                     pass
@@ -293,12 +298,18 @@ def main():
                     request_func, args = process_user_input(debugger_state)
                     send_request(s, request_func, *args)
                 case {"type": "response", "command": "stackTrace",
-                      "body": {"stackFrames": [{"id": frame_id}]}}:
+                      "body": {"stackFrames": [{"id": frame_id, "line": linenumber, "source":
+                                                {"path": filepath}}, *other_frames]}}:
+                    # we are getting only the current frame, which is the first one in the
+                    # stackFrames list
+                    # TODO: account for the fact that the stackframe list can be deeper than one
                     send_request(s, scopes, frame_id)
+                    debugger_state.current_line = (filepath, linenumber)
                 case {"type": "response", "command": "scopes",
                       "body": {"scopes": [{"variablesReference": var_ref}]}}:
                     send_request(s, variables, var_ref)
                 case {"type": "response", "command": "variables"}:
+                    # TODO: rearchitect this so most of this is inside a function instead
                     for variable in body_json['body']['variables']:
                         debugger_state.cmake_variables[variable['name']] = variable['value']
                         if variable['name'] in ['CacheVariables', 'Directories', 'Locals']:
