@@ -14,11 +14,7 @@ import dataclasses
 # linter will warn readline is imported but unused
 import readline
 
-HOST = "/tmp/cmake-blah"
 SEQ = 0
-ALREADY_RUNNING = False
-SINGLE_VARIABLE = None
-TOP_LEVEL_VARS = 0
 
 
 @dataclass
@@ -26,12 +22,12 @@ class DebuggerState():
     response: bytes = b""
     cmake_process_handle: subprocess.Popen = None
     host: str = f"/tmp/cmake-{uuid.uuid4()}"
-    seq: int = 0
     already_running: bool = False
     cmake_variables: dict = dataclasses.field(default_factory=dict)
-    single_variable: str = ""
     top_level_vars: int = 0
     current_line: (str, int) = ("", 0)
+    stacktrace: list = dataclasses.field(default_factory=list)
+    breakpoints: list = dataclasses.field(default_factory=list)
 
 
 # TODO: move the payload functions to a different file
@@ -191,10 +187,10 @@ def process_user_input(debugger_state):
     while True:
         try:
             user_input = input(">>> ").strip().split()
-        except KeyboardInterrupt:
+        except KeyboardInterrupt:  # catches CTRL+C
             print("\nKeyboardInterrupt")
             continue
-        except EOFError:
+        except EOFError:  # catches CTRL+D
             dbg_quit(debugger_state)
 
         match user_input:
@@ -208,9 +204,13 @@ def process_user_input(debugger_state):
                     print(e)
                     continue
 
+                debugger_state.breakpoints.append((filepath, linenum))
+
                 return set_breakpoints, [filepath, linenum]
-            case ["get", "breakpoint" | "br"]:
-                return get_breakpoints, []
+
+            case ["breakpoints"]:
+                pprint(debugger_state.breakpoints)
+
             case ["run" | "r"]:
                 if debugger_state.already_running:
                     print("CMake already started running. Ignoring command.")
@@ -226,14 +226,44 @@ def process_user_input(debugger_state):
                     print(
                         "CMake build has not started running. Cannot print any variables yet. Use 'run' command to start running")
                     continue
-                return stacktrace, []
+                pprint(debugger_state.cmake_variables)
             case ["get", "variable" | "var", varname]:
-                debugger_state.single_variable = varname
-                return stacktrace, []
+                if not debugger_state.already_running:
+                    print(
+                        "CMake build has not started running. Cannot print any variables yet. Use 'run' command to start running")
+                    continue
+                if varname in debugger_state.cmake_variables:
+                    print(
+                        f"{varname}={debugger_state.cmake_variables[varname]}")
+                else:
+                    print(f"{varname}=")
+
             case ["list" | "listing"]:
                 if debugger_state.current_line == ("", 0):
                     print("CMake build has not started running or hit a breakpoint yet")
                     continue
+                filepath, linenum = debugger_state.current_line
+                with open(filepath, 'r') as f:
+                    lines = [line.strip() for line in f.readlines()]
+                    linenum = linenum - 1
+                    print(f"{filepath}:")
+                    if linenum - 2 >= 0:
+                        print(f"   {linenum - 1}: {lines[linenum - 2]}")
+                    if linenum - 1 >= 0:
+                        print(f"   {linenum}: {lines[linenum - 1]}")
+                    print(f"-> {linenum + 1}: {lines[linenum]}")
+                    if linenum + 1 < len(lines):
+                        print(f"   {linenum + 2}: {lines[linenum + 1]}")
+                    if linenum + 2 < len(lines):
+                        print(f"   {linenum + 3}: {lines[linenum + 2]}")
+
+            case ["stacktrace"]:
+                if not debugger_state.already_running:
+                    print(
+                        "CMake build has not started running. Cannot print stacktrace. Use 'run' command to start running")
+                    continue
+                pprint(debugger_state.stacktrace)
+
             case ["quit" | "q"]:
                 # TODO: we should probably change this to something that cleans up
                 # the socket but this will do for now
@@ -295,21 +325,17 @@ def main():
                 case {"type": "response", "command": "configurationDone"}:
                     debugger_state.already_running = True
                 case {"type": "event", "event": "stopped"}:
-                    request_func, args = process_user_input(debugger_state)
-                    send_request(s, request_func, *args)
+                    send_request(s, stacktrace)
                 case {"type": "response", "command": "stackTrace",
                       "body": {"stackFrames": [{"id": frame_id, "line": linenumber, "source":
-                                                {"path": filepath}}, *other_frames]}}:
-                    # we are getting only the current frame, which is the first one in the
-                    # stackFrames list
-                    # TODO: account for the fact that the stackframe list can be deeper than one
+                                                {"path": filepath}} as first_frame, *other_frames]}}:
                     send_request(s, scopes, frame_id)
                     debugger_state.current_line = (filepath, linenumber)
+                    debugger_state.stacktrace = [first_frame, *other_frames]
                 case {"type": "response", "command": "scopes",
                       "body": {"scopes": [{"variablesReference": var_ref}]}}:
                     send_request(s, variables, var_ref)
                 case {"type": "response", "command": "variables"}:
-                    # TODO: rearchitect this so most of this is inside a function instead
                     for variable in body_json['body']['variables']:
                         debugger_state.cmake_variables[variable['name']] = variable['value']
                         if variable['name'] in ['CacheVariables', 'Directories', 'Locals']:
@@ -318,15 +344,7 @@ def main():
                     if debugger_state.top_level_vars > 0:
                         debugger_state.top_level_vars = debugger_state.top_level_vars - 1
                         continue
-                    if debugger_state.single_variable:
-                        if debugger_state.single_variable in debugger_state.cmake_variables:
-                            print(
-                                f"{debugger_state.single_variable}={debugger_state.cmake_variables[debugger_state.single_variable]}")
-                        else:
-                            print(f"{debugger_state.single_variable} does not exist")
-                        debugger_state.single_variable = ""
-                    else:
-                        pprint(debugger_state.cmake_variables)
+
                     request_func, args = process_user_input(debugger_state)
                     send_request(s, request_func, *args)
 
