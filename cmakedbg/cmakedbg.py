@@ -72,7 +72,24 @@ def recv_response(s, response):
     return body_json, response
 
 
+def print_listing(filepath, linenum):
+    with open(filepath, 'r') as f:
+        lines = [line.strip() for line in f.readlines()]
+        linenum = linenum - 1
+        print(f"{filepath}:")
+        if linenum - 2 >= 0:
+            print(f"   {linenum - 1}: {lines[linenum - 2]}")
+        if linenum - 1 >= 0:
+            print(f"   {linenum}: {lines[linenum - 1]}")
+        print(f"-> {linenum + 1}: {lines[linenum]}")
+        if linenum + 1 < len(lines):
+            print(f"   {linenum + 2}: {lines[linenum + 1]}")
+        if linenum + 2 < len(lines):
+            print(f"   {linenum + 3}: {lines[linenum + 2]}")
+
 # debugger commands
+
+
 def initialize():
     payload = {
         "command": 'initialize',
@@ -116,6 +133,36 @@ def get_breakpoints():
 def stacktrace():
     payload = {
         'command': 'stackTrace',
+        'arguments': {
+            'threadId': 1,
+        }
+    }
+    return payload
+
+
+def dbg_next():
+    payload = {
+        'command': 'next',
+        'arguments': {
+            'threadId': 1,
+        }
+    }
+    return payload
+
+
+def step_into():
+    payload = {
+        'command': 'stepIn',
+        'arguments': {
+            'threadId': 1,
+        }
+    }
+    return payload
+
+
+def step_out():
+    payload = {
+        'command': 'stepIn',
         'arguments': {
             'threadId': 1,
         }
@@ -185,6 +232,8 @@ def dbg_quit(debugger_state: DebuggerState):
 
 def process_user_input(debugger_state):
     while True:
+        if debugger_state.current_line != ("", 0):
+            print_listing(*debugger_state.current_line)
         try:
             user_input = input(">>> ").strip().split()
         except KeyboardInterrupt:  # catches CTRL+C
@@ -238,24 +287,31 @@ def process_user_input(debugger_state):
                 else:
                     print(f"{varname}=")
 
-            case ["list" | "listing"]:
+            case ['next' | 'n']:
+                if not debugger_state.already_running:
+                    print(
+                        "CMake build has not started running. Use 'run' command to start running")
+                    continue
+                # TODO: print line that the pointer is on when nexting/stepping
+                return dbg_next, []
+
+            case ['step' | 'si' | 's']:
+                if not debugger_state.already_running:
+                    print(
+                        "CMake build has not started running. Use 'run' command to start running")
+                    continue
+                return step_into, []
+                pass
+
+            # TODO: figure out what the typical keyword is for the 'step out' action in debuggers
+            # and implement
+
+            case ["list" | "listing" | "li"]:
                 if debugger_state.current_line == ("", 0):
                     print("CMake build has not started running or hit a breakpoint yet")
                     continue
-                filepath, linenum = debugger_state.current_line
-                with open(filepath, 'r') as f:
-                    lines = [line.strip() for line in f.readlines()]
-                    linenum = linenum - 1
-                    print(f"{filepath}:")
-                    if linenum - 2 >= 0:
-                        print(f"   {linenum - 1}: {lines[linenum - 2]}")
-                    if linenum - 1 >= 0:
-                        print(f"   {linenum}: {lines[linenum - 1]}")
-                    print(f"-> {linenum + 1}: {lines[linenum]}")
-                    if linenum + 1 < len(lines):
-                        print(f"   {linenum + 2}: {lines[linenum + 1]}")
-                    if linenum + 2 < len(lines):
-                        print(f"   {linenum + 3}: {lines[linenum + 2]}")
+                # TODO: move the below to a function and use it in next/step commands as well
+                print_listing(*debugger_state.current_line)
 
             case ["stacktrace"]:
                 if not debugger_state.already_running:
@@ -275,7 +331,7 @@ def process_user_input(debugger_state):
 
 
 def print_help():
-    print("Usage: cmakedebug cmake <options>")
+    print("Usage: cmakedbg cmake <options>")
 
 
 def launch_cmake(cmd: list, pipe_host):
@@ -347,6 +403,9 @@ def main():
 
                     request_func, args = process_user_input(debugger_state)
                     send_request(s, request_func, *args)
+
+                case {"type": "event", "event": "terminated"}:
+                    dbg_quit(debugger_state)
 
                 case _:  # Default case if no other case is matched
                     # Consider logging this for debugging.
