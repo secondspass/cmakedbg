@@ -231,9 +231,10 @@ def dbg_quit(debugger_state: DebuggerState):
 
 
 def process_user_input(debugger_state):
+    if debugger_state.current_line != ("", 0):
+        print_listing(*debugger_state.current_line)
+
     while True:
-        if debugger_state.current_line != ("", 0):
-            print_listing(*debugger_state.current_line)
         try:
             user_input = input(">>> ").strip().split()
         except KeyboardInterrupt:  # catches CTRL+C
