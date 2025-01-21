@@ -28,6 +28,7 @@ class DebuggerState():
     current_line: (str, int) = ("", 0)
     stacktrace: list = dataclasses.field(default_factory=list)
     breakpoints: list = dataclasses.field(default_factory=list)
+    last_command: str = ""
 
 
 # TODO: move the payload functions to a different file
@@ -160,16 +161,6 @@ def step_into():
     return payload
 
 
-def step_out():
-    payload = {
-        'command': 'stepIn',
-        'arguments': {
-            'threadId': 1,
-        }
-    }
-    return payload
-
-
 def scopes(stackFrame_id):
     payload = {
         'command': 'scopes',
@@ -244,7 +235,8 @@ def process_user_input(debugger_state):
             dbg_quit(debugger_state)
 
         match user_input:
-            case ["set", "breakpoint" | "br", filepath_and_linenum]:
+
+            case ["breakpoint" | "break" | "br", filepath_and_linenum]:
                 try:
                     filepath, linenum = validate_filepath_and_linenum(filepath_and_linenum)
                 except RuntimeWarning as r:
@@ -253,14 +245,8 @@ def process_user_input(debugger_state):
                 except ValueError as e:
                     print(e)
                     continue
-
                 debugger_state.breakpoints.append((filepath, linenum))
-
                 return set_breakpoints, [filepath, linenum]
-
-            case ["breakpoints"]:
-                pprint(debugger_state.breakpoints)
-
             case ["run" | "r"]:
                 if debugger_state.already_running:
                     print("CMake already started running. Ignoring command.")
@@ -271,7 +257,23 @@ def process_user_input(debugger_state):
                     return dbg_continue, []
                 else:
                     print("CMake build has not started running. Use 'run' command to start running")
-            case ["variables" | "vars"]:
+            case ['next' | 'n']:
+                if not debugger_state.already_running:
+                    print(
+                        "CMake build has not started running. Use 'run' command to start running")
+                    continue
+                return dbg_next, []
+            case ['step' | 's']:
+                if not debugger_state.already_running:
+                    print(
+                        "CMake build has not started running. Use 'run' command to start running")
+                    continue
+                return step_into, []
+                pass
+
+            case ["info", "breakpoints" | "break" | "b"]:
+                pprint(debugger_state.breakpoints)
+            case ["info", "variables" | "vars" | "locals"]:
                 if not debugger_state.already_running:
                     print(
                         "CMake build has not started running. Cannot print any variables yet. Use 'run' command to start running")
@@ -287,34 +289,12 @@ def process_user_input(debugger_state):
                         f"{varname}={debugger_state.cmake_variables[varname]}")
                 else:
                     print(f"{varname}=")
-
-            case ['next' | 'n']:
-                if not debugger_state.already_running:
-                    print(
-                        "CMake build has not started running. Use 'run' command to start running")
-                    continue
-                # TODO: print line that the pointer is on when nexting/stepping
-                return dbg_next, []
-
-            case ['step' | 'si' | 's']:
-                if not debugger_state.already_running:
-                    print(
-                        "CMake build has not started running. Use 'run' command to start running")
-                    continue
-                return step_into, []
-                pass
-
-            # TODO: figure out what the typical keyword is for the 'step out' action in debuggers
-            # and implement
-
-            case ["list" | "listing" | "li"]:
+            case ["list" | "listing" | "li" | "l"]:
                 if debugger_state.current_line == ("", 0):
                     print("CMake build has not started running or hit a breakpoint yet")
                     continue
-                # TODO: move the below to a function and use it in next/step commands as well
                 print_listing(*debugger_state.current_line)
-
-            case ["stacktrace"]:
+            case ["stacktrace" | "st" | "backtrace" | "bt"]:
                 if not debugger_state.already_running:
                     print(
                         "CMake build has not started running. Cannot print stacktrace. Use 'run' command to start running")
@@ -322,9 +302,10 @@ def process_user_input(debugger_state):
                 pprint(debugger_state.stacktrace)
 
             case ["quit" | "q"]:
-                # TODO: we should probably change this to something that cleans up
-                # the socket but this will do for now
                 dbg_quit(debugger_state)
+            case ["help" | "h"]:
+                print_debugger_commands()
+
             case []:
                 continue
             case _:
@@ -335,9 +316,43 @@ def print_help():
     print("Usage: cmakedbg cmake <options>")
 
 
+def print_debugger_commands():
+    print("""
+CMake Debugger Commands:
+=======================
+
+Flow Control:
+------------
+breakpoint, break, br <file:line>    Set a breakpoint at specified file and line number
+run, r                               Start the CMake build execution
+continue, c                          Continue execution until next breakpoint
+next, n                              Step over - execute next line without entering functions
+step, s                              Step into - execute next line, entering functions if present
+
+Information:
+------------
+info breakpoints        List all set breakpoints (aliases: info break, info b)
+info variables          Display all CMake variables in current scope (aliases: info vars, info locals)
+get variable <name>     Display value of specific CMake variable (alias: get var)
+list                    Show source code around current line (aliases: listing, li, l)
+stacktrace              Display current call stack (aliases: st, backtrace, bt)
+
+Other:
+------
+quit, q              Exit the debugger
+help, h              Display this help message
+
+Notes:
+- Many commands require the CMake build to be running first (start with 'run')
+- Commands can use either full names or their shorter aliases
+- Empty input will be ignored
+- Unknown commands will display an error message
+          """)
+
+
 def launch_cmake(cmd: list, pipe_host):
 
-    if len(cmd) == 0:
+    if len(cmd) == 0 or cmd[0] == "-h":
         print_help()
         sys.exit(1)
     if "cmake" not in cmd[0]:
