@@ -1,7 +1,8 @@
 ## TODOs:
 - [x] implement printing out individual variables
 - [x] launch cmake directly from debugger
-- [ ] add log levels and print json sends and recvs only for higher log levels
+- [ ] add log levels and print json sends and recvs only for higher log levels (with -v|--verbose
+  flag)
 - [x] show listing at point
 - [x] implementing 'next' (step over) and 'step into'
 - [x] write help output

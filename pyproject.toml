@@ -2,7 +2,7 @@
 name = "cmakedbg"
 version = "0.1.0"
 description = "A GDB like terminal interface for CMake's debugger, interfacing with CMake's Debug Adapter Protocol"
-authors = ["Your Name <you@example.com>"]
+authors = ["Subil <subil@secondspass.org"]
 license = "MIT License"
 readme = "README.md"
 

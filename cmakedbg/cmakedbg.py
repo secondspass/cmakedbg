@@ -1,4 +1,5 @@
 import socket
+import argparse
 import time
 import shutil
 import uuid
@@ -9,12 +10,15 @@ import json
 from pprint import pprint
 from dataclasses import dataclass
 import dataclasses
+import logging
+
 
 # importing readline so input() will do better editing
 # linter will warn readline is imported but unused
 import readline
 
 SEQ = 0
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -36,8 +40,7 @@ def send_request(s, request_func, *args):
     payload = request_func(*args)
     request_bytes = create_request(payload)
 
-    # TODO: change this to log instead
-    print(request_bytes)
+    logger.info(request_bytes)
     try:
         s.sendall(request_bytes)
     except Exception as e:
@@ -67,9 +70,8 @@ def recv_response(s, response):
         response = response + s.recv(4096)
     body, response = response[:size], response[size:]
     body_json = json.loads(body.decode())
-    print(header)
-    pprint(body_json)
-    print("", flush=True)
+    logger.info(header)
+    logger.info(body_json)
     return body_json, response
 
 
@@ -373,9 +375,21 @@ def launch_cmake(cmd: list, pipe_host):
 
 def main():
     debugger_state = DebuggerState()
-    debugger_state.cmake_process_handle = launch_cmake(sys.argv[1:], debugger_state.host)
-    print(debugger_state.cmake_process_handle)
+    # TODO: add argparsing to get the -v|--verbose flag
+    # parser = argparse.ArgumentParser()
+    # parser.add_argument("-v", "--verbose", help="increase output verbosity",
+    #                    action="store_true", default=False)
+    # args = parser.parse_args()
+    # if args.verbose:
+    #    loglevel = logging.INFO
+    # else:
+    #    loglevel = logging.WARN
+    # print(args)
+    # exit(0)
 
+    logging.basicConfig(stream=logging.StreamHandler(stream=sys.stderr), level=logging.WARN)
+    debugger_state.cmake_process_handle = launch_cmake(sys.argv[1:], debugger_state.host)
+    logger.info(debugger_state.cmake_process_handle)
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
 
         s.connect(debugger_state.host)
