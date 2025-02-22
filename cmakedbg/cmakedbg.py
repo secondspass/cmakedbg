@@ -4,6 +4,7 @@ import time
 import shutil
 import uuid
 import sys
+from sys import stdout
 import subprocess
 import pathlib
 import json
@@ -19,7 +20,8 @@ import readline
 
 SEQ = 0
 logger = logging.getLogger(__name__)
-
+handler = logging.StreamHandler(stdout)
+logger.addHandler(handler)
 
 @dataclass
 class DebuggerState():
@@ -376,19 +378,21 @@ def launch_cmake(cmd: list, pipe_host):
 def main():
     debugger_state = DebuggerState()
     # TODO: add argparsing to get the -v|--verbose flag
-    # parser = argparse.ArgumentParser()
-    # parser.add_argument("-v", "--verbose", help="increase output verbosity",
-    #                    action="store_true", default=False)
-    # args = parser.parse_args()
-    # if args.verbose:
-    #    loglevel = logging.INFO
-    # else:
-    #    loglevel = logging.WARN
-    # print(args)
-    # exit(0)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-v", "--verbose", help="increase output verbosity",
+                        action="store_true", default=False)
+    parser.add_argument("-c", "--command", help="cmake command to start and debug",
+                        nargs='+', required=True)
 
-    logging.basicConfig(stream=logging.StreamHandler(stream=sys.stderr), level=logging.WARN)
-    debugger_state.cmake_process_handle = launch_cmake(sys.argv[1:], debugger_state.host)
+    args = parser.parse_args()
+    if args.verbose:
+        loglevel = logging.INFO
+    else:
+        loglevel = logging.WARN
+    print(args)
+
+    logging.basicConfig(stream=logging.StreamHandler(stream=sys.stderr), level=loglevel)
+    debugger_state.cmake_process_handle = launch_cmake(args.command, debugger_state.host)
     logger.info(debugger_state.cmake_process_handle)
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
 
