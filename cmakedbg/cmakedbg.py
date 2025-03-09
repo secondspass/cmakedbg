@@ -20,8 +20,6 @@ import readline
 
 SEQ = 0
 logger = logging.getLogger(__name__)
-handler = logging.StreamHandler(stdout)
-logger.addHandler(handler)
 
 
 @dataclass
@@ -386,7 +384,7 @@ def main():
     else:
         loglevel = logging.WARN
 
-    logging.basicConfig(stream=sys.stderr, level=logging.WARN)
+    logging.basicConfig(stream=sys.stdout, level=loglevel)
     debugger_state.cmake_process_handle = launch_cmake(args.cmd, debugger_state.host,
                                                        parser.print_help)
     logger.info(debugger_state.cmake_process_handle)
