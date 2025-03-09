@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 handler = logging.StreamHandler(stdout)
 logger.addHandler(handler)
 
+
 @dataclass
 class DebuggerState():
     response: bytes = b""
@@ -316,10 +317,6 @@ def process_user_input(debugger_state):
                 print("Unknown command")
 
 
-def print_help():
-    print("Usage: cmakedbg cmake <options>")
-
-
 def print_debugger_commands():
     print("""
 CMake Debugger Commands:
@@ -354,9 +351,9 @@ Notes:
           """)
 
 
-def launch_cmake(cmd: list, pipe_host):
+def launch_cmake(cmd: list, pipe_host, print_help):
 
-    if len(cmd) == 0 or cmd[0] == "-h":
+    if len(cmd) == 0:
         print_help()
         sys.exit(1)
     if "cmake" not in cmd[0]:
@@ -381,18 +378,17 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("-v", "--verbose", help="increase output verbosity",
                         action="store_true", default=False)
-    parser.add_argument("-c", "--command", help="cmake command to start and debug",
-                        nargs='+', required=True)
-
+    parser.add_argument("--cmd", help="cmake command with arguments to run debugger on",
+                        action="store", nargs="+", metavar=("cmake", "OPTIONS"), required=True)
     args = parser.parse_args()
     if args.verbose:
         loglevel = logging.INFO
     else:
         loglevel = logging.WARN
-    print(args)
 
-    logging.basicConfig(stream=logging.StreamHandler(stream=sys.stderr), level=loglevel)
-    debugger_state.cmake_process_handle = launch_cmake(args.command, debugger_state.host)
+    logging.basicConfig(stream=sys.stderr, level=logging.WARN)
+    debugger_state.cmake_process_handle = launch_cmake(args.cmd, debugger_state.host,
+                                                       parser.print_help)
     logger.info(debugger_state.cmake_process_handle)
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
 
