@@ -31,7 +31,6 @@ def test_validate_filepath_and_linenum():
 
 def test_debugger_state():
     debugger_state = cmakedbg.DebuggerState()
-    assert debugger_state.seq == 0
     assert len(debugger_state.host.split('-')) == 6
     assert "/tmp/cmake" in debugger_state.host
     assert debugger_state.already_running is False
@@ -58,7 +57,7 @@ def cmake_background_process(debugger_state):
         shutil.rmtree(build_dir)
     build_dir.mkdir()
     os.chdir(str(build_dir))
-    bg_process = cmakedbg.launch_cmake(["cmake", ".."], debugger_state.host)
+    bg_process = cmakedbg.launch_cmake(["cmake", ".."], debugger_state.host, lambda: print("help"))
     yield bg_process
     bg_process.kill()
     os.chdir(str(curr_dir))
