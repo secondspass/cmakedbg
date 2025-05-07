@@ -1,10 +1,16 @@
 # Cmakedbg
 
 Cmakedbg is a command-line debugger for CMake that can be run to debug your CMake build steps.
-Similar to gdb, you can launch your CMake build under cmakedbg, set breakpoints, step through the
-cmake steps line by line, show the listing to see which CMake file you're in, show the backtrace to
-see the CMake callstack, and hopefully more useful things. This is useful for those of us that work
-mainly in the terminal and needed a gdb-like terminal tool to help debug complicated CMake builds.
+Similar to gdb, you can 
+1. launch your CMake build under cmakedbg 
+2. set breakpoints
+3. step through the cmake steps line by line
+4. show the listing to see which CMake file you're in
+5. show the backtrace to see the CMake callstack
+6. and hopefully more useful things in the future 
+
+This is useful for those of us that work mainly in the terminal and needed a gdb-like terminal tool
+to help debug complicated CMake builds.
 
 ## How to use
 
@@ -16,6 +22,39 @@ mainly in the terminal and needed a gdb-like terminal tool to help debug complic
 4. Launch CMake with `run`. CMake will now run till it hits the breakpoint
 5. `next` and `step` will go to next line, and step into the function respectively, just like gdb.
 6. Type `help` on the REPL to see what commands are available.
+```
+>>> help
+
+CMake Debugger Commands:
+=======================
+
+Flow Control:
+------------
+breakpoint, break, br <file:line>    Set a breakpoint at specified file and line number
+run, r                               Start the CMake build execution
+continue, c                          Continue execution until next breakpoint
+next, n                              Step over - execute next line without entering functions
+step, s                              Step into - execute next line, entering functions if present
+
+Information:
+------------
+info breakpoints        List all set breakpoints (aliases: info break, info b)
+info variables          Display all CMake variables in current scope (aliases: info vars, info locals)
+get variable <name>     Display value of specific CMake variable (alias: get var)
+list                    Show source code around current line (aliases: listing, li, l)
+stacktrace              Display current call stack (aliases: st, backtrace, bt)
+
+Other:
+------
+quit, q              Exit the debugger
+help, h              Display this help message
+
+Notes:
+- Many commands require the CMake build to be running first (start with 'run')
+- Commands can use either full names or their shorter aliases
+- Empty input will be ignored
+- Unknown commands will display an error message
+```
 
 ## Where this came from
 
