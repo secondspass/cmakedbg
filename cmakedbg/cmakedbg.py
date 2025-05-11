@@ -198,7 +198,7 @@ def configuration_done():
     return payload
 
 
-def validate_filepath_and_linenum(filepath_and_linenum: str):
+def validate_filepath_and_linenum(filepath_and_linenum: str) -> tuple[str, int]:
     filepathsplit = filepath_and_linenum.split(":")
     if len(filepathsplit) > 2:
         raise RuntimeWarning(
@@ -224,7 +224,7 @@ def dbg_quit(debugger_state: DebuggerState):
     sys.exit(0)
 
 
-def process_user_input(debugger_state):
+def process_user_input(debugger_state) -> tuple[callable, list[any]]:
     if debugger_state.current_line != ("", 0):
         print_listing(*debugger_state.current_line)
 
@@ -237,83 +237,107 @@ def process_user_input(debugger_state):
         except EOFError:  # catches CTRL+D
             dbg_quit(debugger_state)
 
-        match user_input:
 
-            case ["breakpoint" | "break" | "br", filepath_and_linenum]:
-                try:
-                    filepath, linenum = validate_filepath_and_linenum(filepath_and_linenum)
-                except RuntimeWarning as r:
-                    print(r)
-                    continue
-                except ValueError as e:
-                    print(e)
-                    continue
-                debugger_state.breakpoints.append((filepath, linenum))
-                return set_breakpoints, [filepath, linenum]
-            case ["run" | "r"]:
-                if debugger_state.already_running:
-                    print("CMake already started running. Ignoring command.")
-                else:
-                    return configuration_done, []
-            case ["continue" | "c"]:
-                if debugger_state.already_running:
-                    return dbg_continue, []
-                else:
-                    print("CMake build has not started running. Use 'run' command to start running")
-            case ['next' | 'n']:
-                if not debugger_state.already_running:
-                    print(
-                        "CMake build has not started running. Use 'run' command to start running")
-                    continue
+        if (debugger_command_and_args := parse_command(debugger_state, user_input)) is not None:
+            return debugger_command_and_args
+        
+
+
+def parse_command(debugger_state: DebuggerState, user_input: str) -> tuple[callable, list[any]] | None: 
+
+#    if "pipe" in user_input and "|" in user_input:
+#
+#        cmakedbg_command = user_input[1,user_input.index('|')]
+#        shell_command = 
+#
+#    else:
+#        print("Invalid syntax for pipe command")
+#        return
+
+    match user_input:
+        case ["pipe", *rest]:
+            # TODO: finish working on the pipe command
+            rest = " ".join(rest)
+            if "|" not in rest:
+                print("Invalid syntax for pipe command")
+                return
+            dbg_command, shell_command = rest.split("|")
+            dbg_command = shlex.split(dbg_command)
+            shell_command = shlex.split(shell_command)
+
+    
+        case ["breakpoint" | "break" | "br", filepath_and_linenum]:
+            try:
+                filepath, linenum = validate_filepath_and_linenum(filepath_and_linenum)
+            except RuntimeWarning as r:
+                print(r)
+                return
+            except ValueError as e:
+                print(e)
+                return
+            debugger_state.breakpoints.append((filepath, linenum))
+            return set_breakpoints, [filepath, linenum]
+        case ["run" | "r"]:
+            if debugger_state.already_running:
+                print("CMake already started running. Ignoring command.")
+            else:
+                return configuration_done, []
+        case ["continue" | "c"]:
+            if not debugger_state.already_running:
+                print("CMake build has not started running. Use 'run' command to start running")
+            else:
+                return dbg_continue, []
+        case ['next' | 'n']:
+            if not debugger_state.already_running:
+                print(
+                    "CMake build has not started running. Use 'run' command to start running")
+            else:
                 return dbg_next, []
-            case ['step' | 's']:
-                if not debugger_state.already_running:
-                    print(
-                        "CMake build has not started running. Use 'run' command to start running")
-                    continue
+        case ['step' | 's']:
+            if not debugger_state.already_running:
+                print(
+                    "CMake build has not started running. Use 'run' command to start running")
+            else:
                 return step_into, []
-                pass
-
-            case ["info", "breakpoints" | "break" | "b"]:
-                pprint(debugger_state.breakpoints)
-            case ["info", "variables" | "vars" | "locals"]:
-                if not debugger_state.already_running:
-                    print(
-                        "CMake build has not started running. Cannot print any variables yet. Use 'run' command to start running")
-                    continue
+    
+        case ["info", "breakpoints" | "break" | "b"]:
+            pprint(debugger_state.breakpoints)
+        case ["info", "variables" | "vars" | "locals"]:
+            if not debugger_state.already_running:
+                print(
+                    "CMake build has not started running. Cannot print any variables yet. Use 'run' command to start running")
+            else:
                 pprint(debugger_state.cmake_variables)
-            case ["get", "variable" | "var", varname]:
-                if not debugger_state.already_running:
-                    print(
-                        "CMake build has not started running. Cannot print any variables yet. Use 'run' command to start running")
-                    continue
-                if varname in debugger_state.cmake_variables:
-                    print(
-                        f"{varname}={debugger_state.cmake_variables[varname]}")
-                else:
-                    print(f"{varname}=")
-            case ["list" | "listing" | "li" | "l"]:
-                if debugger_state.current_line == ("", 0):
-                    print("CMake build has not started running or hit a breakpoint yet")
-                    continue
+        case ["get", "variable" | "var", varname]:
+            if not debugger_state.already_running:
+                print(
+                    "CMake build has not started running. Cannot print any variables yet. Use 'run' command to start running")
+            elif varname in debugger_state.cmake_variables:
+                print(
+                    f"{varname}={debugger_state.cmake_variables[varname]}")
+            else:
+                print(f"{varname}=")
+        case ["list" | "listing" | "li" | "l"]:
+            if debugger_state.current_line == ("", 0):
+                print("CMake build has not started running or hit a breakpoint yet")
+            else:
                 print_listing(*debugger_state.current_line)
-            case ["stacktrace" | "st" | "backtrace" | "bt"]:
-                if not debugger_state.already_running:
-                    print(
-                        "CMake build has not started running. Cannot print stacktrace. Use 'run' command to start running")
-                    continue
+        case ["stacktrace" | "st" | "backtrace" | "bt"]:
+            if not debugger_state.already_running:
+                print(
+                    "CMake build has not started running. Cannot print stacktrace. Use 'run' command to start running")
+            else:
                 pprint(debugger_state.stacktrace)
-
-            case ["quit" | "q"]:
-                dbg_quit(debugger_state)
-            case ["help" | "h"]:
-                print_debugger_commands()
-
-            case []:
-                continue
-            case _:
-                print("Unknown command")
-
+    
+        case ["quit" | "q"]:
+            dbg_quit(debugger_state)
+        case ["help" | "h"]:
+            print_debugger_commands()
+    
+        case []:
+            return
+        case _:
+            print("Unknown command")
 
 def print_debugger_commands():
     print("""

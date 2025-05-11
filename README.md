@@ -85,3 +85,4 @@ a plain CLI CMake debugger yet. UNTIL NOW!!!
   cmakedbg on launch
 - [x] account for the fact in the main while loop, that there are cases when receiving the
   stackframe response that the number of frames in the list can be more than 1.j
+- [ ] add ability to pipe output of cmakedbg command outputs to shell commands
