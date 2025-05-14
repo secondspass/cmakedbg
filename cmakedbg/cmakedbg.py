@@ -265,6 +265,14 @@ def parse_command(debugger_state: DebuggerState, user_input: str) -> tuple[calla
             dbg_command = shlex.split(dbg_command)
             shell_command = shlex.split(shell_command)
 
+            # Possible design: save shell_command and pipe=True in debugger_state
+            # call parse command recursively with the dbg_command
+            # return parse_command output back up to process_user_input
+            # and then in process_user_input (both where the return statement is and near the top
+            # where we do print_listing (because next and step don't have explicit output, but does move to the next line
+            # and that's an output too)) we pipe the output to the shel command
+            # Then we clear debugger_state of pipe and shell command
+
     
         case ["breakpoint" | "break" | "br", filepath_and_linenum]:
             try:
