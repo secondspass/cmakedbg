@@ -12,7 +12,7 @@ from pprint import pprint
 from dataclasses import dataclass
 import dataclasses
 import logging
-
+import io
 
 # importing readline so input() will do better editing
 # linter will warn readline is imported but unused
@@ -34,6 +34,7 @@ class DebuggerState():
     stacktrace: list = dataclasses.field(default_factory=list)
     breakpoints: list = dataclasses.field(default_factory=list)
     last_command: str = ""
+    cmd_output: io.StringIO = io.StringIO()
 
 
 # TODO: move the payload functions to a different file
@@ -78,18 +79,21 @@ def recv_response(s, response):
 
 def print_listing(filepath, linenum):
     with open(filepath, 'r') as f:
+        listing_buffer = io.StringIO()
         lines = [line.strip() for line in f.readlines()]
         linenum = linenum - 1
-        print(f"{filepath}:")
+        print(f"{filepath}:", file=listing_buffer)
         if linenum - 2 >= 0:
-            print(f"   {linenum - 1}: {lines[linenum - 2]}")
+            print(f"   {linenum - 1}: {lines[linenum - 2]}", file=listing_buffer)
         if linenum - 1 >= 0:
-            print(f"   {linenum}: {lines[linenum - 1]}")
-        print(f"-> {linenum + 1}: {lines[linenum]}")
+            print(f"   {linenum}: {lines[linenum - 1]}", file=listing_buffer)
+        print(f"-> {linenum + 1}: {lines[linenum]}", file=listing_buffer)
         if linenum + 1 < len(lines):
-            print(f"   {linenum + 2}: {lines[linenum + 1]}")
+            print(f"   {linenum + 2}: {lines[linenum + 1]}", file=listing_buffer)
         if linenum + 2 < len(lines):
-            print(f"   {linenum + 3}: {lines[linenum + 2]}")
+            print(f"   {linenum + 3}: {lines[linenum + 2]}", file=listing_buffer)
+
+        return listing_buffer.getvalue()
 
 # debugger commands
 
@@ -226,7 +230,8 @@ def dbg_quit(debugger_state: DebuggerState):
 
 def process_user_input(debugger_state) -> tuple[callable, list[any]]:
     if debugger_state.current_line != ("", 0):
-        print_listing(*debugger_state.current_line)
+        listing = print_listing(*debugger_state.current_line)
+        print(listing)
 
     while True:
         try:
@@ -254,12 +259,13 @@ def parse_command(debugger_state: DebuggerState, user_input: str) -> tuple[calla
 #        print("Invalid syntax for pipe command")
 #        return
 
+    command_output = io.StringIO()
     match user_input:
         case ["pipe", *rest]:
             # TODO: finish working on the pipe command
             rest = " ".join(rest)
             if "|" not in rest:
-                print("Invalid syntax for pipe command")
+                print("Invalid syntax for pipe command", file=command_output)
                 return
             dbg_command, shell_command = rest.split("|")
             dbg_command = shlex.split(dbg_command)
@@ -272,13 +278,17 @@ def parse_command(debugger_state: DebuggerState, user_input: str) -> tuple[calla
             # where we do print_listing (because next and step don't have explicit output, but does move to the next line
             # and that's an output too)) we pipe the output to the shel command
             # Then we clear debugger_state of pipe and shell command
+            # devlog 2025-05-14: working on adding io.StringIO as the way to pass around print
+            # output so it can be passed to shell command
+
+
 
     
         case ["breakpoint" | "break" | "br", filepath_and_linenum]:
             try:
                 filepath, linenum = validate_filepath_and_linenum(filepath_and_linenum)
             except RuntimeWarning as r:
-                print(r)
+                print(r, file=command_output)
                 return
             except ValueError as e:
                 print(e)
