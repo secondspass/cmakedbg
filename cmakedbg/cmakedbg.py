@@ -279,8 +279,6 @@ def parse_command(
             # where we do print_listing (because next and step don't have explicit output, but does move to the next line
             # and that's an output too)) we pipe the output to the shel command
             # Then we clear debugger_state of pipe and shell command
-            # devlog 2025-05-14: working on adding io.StringIO as the way to pass around print
-            # output so it can be passed to shell command
 
         case ["breakpoint" | "break" | "br", filepath_and_linenum]:
             try:
