@@ -38,6 +38,7 @@ class DebuggerState:
     breakpoints: list = dataclasses.field(default_factory=list)
     last_command: str = ""
     cmd_output: io.StringIO = io.StringIO()
+    shell_command: list = []
 
 
 # TODO: move the payload functions to a different file
@@ -228,7 +229,16 @@ def dbg_quit(debugger_state: DebuggerState):
 def process_user_input(debugger_state) -> tuple[Callable, list[Any]]:
     if debugger_state.current_line != ("", 0):
         listing = print_listing(*debugger_state.current_line)
-        print(listing)
+
+        # TODO: this if else statement should be its own function
+        if debugger_state.shell_command != []:
+            result = subprocess.run(debugger_state.shell_command, shell=True,
+                                    input=listing, capture_output=True,
+                                    text=True)
+            debugger_state.shell_command = []
+            print(result.stdout)
+        else:
+            print(listing)
 
     while True:
         try:
@@ -244,7 +254,16 @@ def process_user_input(debugger_state) -> tuple[Callable, list[Any]]:
             # debugger command and args
             return output_or_command
         else:
-            print(output_or_command.getvalue())
+            # TODO: this if else statement should be its own function
+            if debugger_state.shell_command != []:
+                result = subprocess.run(debugger_state.shell_command, shell=True,
+                                        input=output_or_command.getvalue(), capture_output=True,
+                                        text=True)
+                debugger_state.shell_command = []
+                print(result.stdout)
+
+            else:
+                print(output_or_command.getvalue())
 
 
 def parse_command(
@@ -264,21 +283,19 @@ def parse_command(
     match user_input:
         case ["pipe", *rest]:
             # TODO: finish working on the pipe command
+            # TODO: handle case where there are more than one | symbols, and do the piping
+            # accordingly
             rest = " ".join(rest)
             if "|" not in rest:
                 print("Invalid syntax for pipe command", file=command_output)
                 return command_output
-            dbg_command, shell_command = rest.split("|")
+            dbg_command, shell_command = rest.split("|", maxsplit=1) 
             dbg_command = shlex.split(dbg_command)
-            shell_command = shlex.split(shell_command)
+            debugger_state.shell_command = shell_command
 
-            # Possible design: save shell_command and pipe=True in debugger_state
-            # call parse command recursively with the dbg_command
-            # return parse_command output back up to process_user_input
-            # and then in process_user_input (both where the return statement is and near the top
-            # where we do print_listing (because next and step don't have explicit output, but does move to the next line
-            # and that's an output too)) we pipe the output to the shel command
-            # Then we clear debugger_state of pipe and shell command
+            
+
+            return parse_command(debugger_state, dbg_command)
 
         case ["breakpoint" | "break" | "br", filepath_and_linenum]:
             try:
