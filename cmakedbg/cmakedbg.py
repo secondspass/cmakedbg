@@ -38,7 +38,7 @@ class DebuggerState:
     breakpoints: list = dataclasses.field(default_factory=list)
     last_command: str = ""
     cmd_output: io.StringIO = io.StringIO()
-    shell_command: list = []
+    shell_command: list = dataclasses.field(default_factory=list)
 
 
 # TODO: move the payload functions to a different file
@@ -226,19 +226,23 @@ def dbg_quit(debugger_state: DebuggerState):
     sys.exit(0)
 
 
-def process_user_input(debugger_state) -> tuple[Callable, list[Any]]:
+def pipe_to_shell_or_print(debugger_state: DebuggerState, inputstr: str) -> None:
+    if debugger_state.shell_command != []:
+        result = subprocess.run(
+            debugger_state.shell_command,
+            shell=True,
+            input=output_or_command.getvalue(),
+            text=True,
+        )
+        debugger_state.shell_command = []
+    
+    else:
+        print(inputstr)
+
+def process_user_input(debugger_state: DebuggerState) -> tuple[Callable, list[Any]]:
     if debugger_state.current_line != ("", 0):
         listing = print_listing(*debugger_state.current_line)
-
-        # TODO: this if else statement should be its own function
-        if debugger_state.shell_command != []:
-            result = subprocess.run(debugger_state.shell_command, shell=True,
-                                    input=listing, capture_output=True,
-                                    text=True)
-            debugger_state.shell_command = []
-            print(result.stdout)
-        else:
-            print(listing)
+        pipe_to_shell_or_print(debugger_state, listing)
 
     while True:
         try:
@@ -251,19 +255,10 @@ def process_user_input(debugger_state) -> tuple[Callable, list[Any]]:
 
         output_or_command = parse_command(debugger_state, user_input)
         if type(output_or_command) is tuple:
-            # debugger command and args
+            # debugger command and args to send to cmake DAP server
             return output_or_command
         else:
-            # TODO: this if else statement should be its own function
-            if debugger_state.shell_command != []:
-                result = subprocess.run(debugger_state.shell_command, shell=True,
-                                        input=output_or_command.getvalue(), capture_output=True,
-                                        text=True)
-                debugger_state.shell_command = []
-                print(result.stdout)
-
-            else:
-                print(output_or_command.getvalue())
+            pipe_to_shell_or_print(debugger_state, output_or_command.getvalue())
 
 
 def parse_command(
@@ -282,18 +277,13 @@ def parse_command(
     command_output = io.StringIO()
     match user_input:
         case ["pipe", *rest]:
-            # TODO: finish working on the pipe command
-            # TODO: handle case where there are more than one | symbols, and do the piping
-            # accordingly
             rest = " ".join(rest)
             if "|" not in rest:
                 print("Invalid syntax for pipe command", file=command_output)
                 return command_output
-            dbg_command, shell_command = rest.split("|", maxsplit=1) 
+            dbg_command, shell_command = rest.split("|", maxsplit=1)
             dbg_command = shlex.split(dbg_command)
             debugger_state.shell_command = shell_command
-
-            
 
             return parse_command(debugger_state, dbg_command)
 
@@ -415,8 +405,10 @@ stacktrace              Display current call stack (aliases: st, backtrace, bt)
 
 Other:
 ------
-quit, q              Exit the debugger
-help, h              Display this help message
+pipe <cmakedbg command> | <shell command>     Pipe the output of a cmakedbg command to a shell
+                                              command e.g. pipe info vars | less
+quit, q                                       Exit the debugger
+help, h                                       Display this help message
 
 Notes:
 - Many commands require the CMake build to be running first (start with 'run')
