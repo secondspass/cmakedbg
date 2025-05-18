@@ -36,7 +36,7 @@ class DebuggerState:
     current_line: tuple[str, int] = ("", 0)
     stacktrace: list = dataclasses.field(default_factory=list)
     breakpoints: list = dataclasses.field(default_factory=list)
-    last_command: str = ""
+    last_command: list[str] = dataclasses.field(default_factory=list)
     cmd_output: io.StringIO = io.StringIO()
     shell_command: list = dataclasses.field(default_factory=list)
 
@@ -253,6 +253,9 @@ def process_user_input(debugger_state: DebuggerState) -> tuple[Callable, list[An
         except EOFError:  # catches CTRL+D
             dbg_quit(debugger_state)
 
+        if user_input != []:
+            debugger_state.last_command = user_input
+
         output_or_command = parse_command(debugger_state, user_input)
         if type(output_or_command) is tuple:
             # debugger command and args to send to cmake DAP server
@@ -275,6 +278,8 @@ def parse_command(
     #        return
 
     command_output = io.StringIO()
+
+
     match user_input:
         case ["pipe", *rest]:
             rest = " ".join(rest)
@@ -376,7 +381,9 @@ def parse_command(
             print(print_debugger_commands(), file=command_output)
 
         case []:
-            pass
+            # repeat last command
+            if debugger_state.last_command != []:
+                return parse_command(debugger_state, debugger_state.last_command)
         case _:
             print("Unknown command", file=command_output)
     return command_output

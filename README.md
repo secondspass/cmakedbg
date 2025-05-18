@@ -78,7 +78,7 @@ a plain CLI CMake debugger yet. UNTIL NOW!!!
 - [x] write man page
 - [x] quit - with ctrl+d and with command 'quit'
 - [x] add tests
-- [ ] add support for repeating last command when pressing "enter"
+- [x] add support for repeating last command when pressing "enter"
 - [x] change globals to a dataclass 
 - [ ] add types
 - [ ] add support for an .rc file where you can set a breakpoint info that will be read by the
