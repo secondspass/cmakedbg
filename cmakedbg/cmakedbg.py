@@ -231,7 +231,7 @@ def pipe_to_shell_or_print(debugger_state: DebuggerState, inputstr: str) -> None
         result = subprocess.run(
             debugger_state.shell_command,
             shell=True,
-            input=output_or_command.getvalue(),
+            input=inputstr,
             text=True,
         )
         debugger_state.shell_command = []
