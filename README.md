@@ -88,3 +88,5 @@ a plain CLI CMake debugger yet. UNTIL NOW!!!
 - [x] add ability to pipe output of cmakedbg command outputs to shell commands
 - [ ] tests for pipe command, parse user output, other functions
 - [ ] figure out how to make this installable as a command line utility
+- [ ] change how the list command works to be more aligned to gdb behavior
+- [ ] refactor for readability, and add lots of tests

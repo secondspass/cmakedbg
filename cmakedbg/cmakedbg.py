@@ -5,7 +5,6 @@ import time
 import shutil
 import uuid
 import sys
-from sys import stdout
 import subprocess
 import pathlib
 import json
@@ -38,7 +37,7 @@ class DebuggerState:
     breakpoints: list = dataclasses.field(default_factory=list)
     last_command: list[str] = dataclasses.field(default_factory=list)
     cmd_output: io.StringIO = io.StringIO()
-    shell_command: list = dataclasses.field(default_factory=list)
+    shell_command: str = ""
 
 
 # TODO: move the payload functions to a different file
@@ -227,17 +226,18 @@ def dbg_quit(debugger_state: DebuggerState):
 
 
 def pipe_to_shell_or_print(debugger_state: DebuggerState, inputstr: str) -> None:
-    if debugger_state.shell_command != []:
+    if debugger_state.shell_command != "":
         result = subprocess.run(
             debugger_state.shell_command,
             shell=True,
             input=inputstr,
             text=True,
         )
-        debugger_state.shell_command = []
-    
+        debugger_state.shell_command = ""
+
     else:
         print(inputstr)
+
 
 def process_user_input(debugger_state: DebuggerState) -> tuple[Callable, list[Any]]:
     if debugger_state.current_line != ("", 0):
@@ -245,6 +245,7 @@ def process_user_input(debugger_state: DebuggerState) -> tuple[Callable, list[An
         pipe_to_shell_or_print(debugger_state, listing)
 
     while True:
+        user_input = []
         try:
             user_input = input(">>> ").strip().split()
         except KeyboardInterrupt:  # catches CTRL+C
@@ -278,7 +279,6 @@ def parse_command(
     #        return
 
     command_output = io.StringIO()
-
 
     match user_input:
         case ["pipe", *rest]:
@@ -375,10 +375,11 @@ def parse_command(
             else:
                 pprint(debugger_state.stacktrace, stream=command_output)
 
-        case ["quit" | "q"]:
-            dbg_quit(debugger_state)
         case ["help" | "h"]:
             print(print_debugger_commands(), file=command_output)
+
+        case ["quit" | "q"]:
+            dbg_quit(debugger_state)
 
         case []:
             # repeat last command
@@ -420,7 +421,7 @@ help, h                                       Display this help message
 Notes:
 - Many commands require the CMake build to be running first (start with 'run')
 - Commands can use either full names or their shorter aliases
-- Empty input will be ignored
+- Empty input will repeat the last command
 - Unknown commands will display an error message
           """
 
@@ -481,7 +482,6 @@ def main():
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
 
         s.connect(debugger_state.host)
-        debugger_state.response = b""
 
         send_request(s, initialize)
 
