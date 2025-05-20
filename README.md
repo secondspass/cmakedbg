@@ -1,25 +1,41 @@
 # Cmakedbg
-
 Cmakedbg is a command-line debugger for CMake that can be run to debug your CMake build steps.
+
 Similar to gdb, you can 
 1. launch your CMake build under cmakedbg 
 2. set breakpoints
 3. step through the cmake steps line by line
 4. show the listing to see which CMake file you're in
 5. show the backtrace to see the CMake callstack
-6. and hopefully more useful things in the future 
+6. inspect CMake variables
+7. pipe debugger command output to shell commands
+8. and hopefully more useful things in the future 
 
 This is useful for those of us that work mainly in the terminal and needed a gdb-like terminal tool
 to help debug complicated CMake builds.
 
-## How to use
+# How to install
+1. Clone this repository and cd into it
+2. Run `pip install .` (make sure you set up your virtual environment first, or use `pipx install .`
+   to install it without needing to set up a virtual environment).
+3. Once installed, `cmakedbg` command will be available on the command line.
 
-1. Clone the repository with `git clone`. 
-2. If you run your cmake build with `cmake ..`, then to run your CMake run under cmakedbg, simply do
-   `python3 /path/to/cmakedbg/cmakedbg --cmd cmake ..`.  This will open a REPL. 
+## How to use
+```
+usage: cmakedbg [-h] [-v] --cmd cmake [OPTIONS ...]
+
+options:
+  -h, --help            show this help message and exit
+  -v, --verbose         increase output verbosity
+  --cmd cmake [OPTIONS ...]
+                        cmake command with arguments to run debugger on
+```
+
+2. If you run your cmake build with `cmake ..` from the build directory, then to run your CMake run under cmakedbg, simply do
+   `cmakedbg --cmd cmake ..`.  This will open a REPL. 
 3. Set a breakpoint with `br /path/to/CMakeLists.txt:<lineno>` where `<lineno>` should be replaced
    with the appropriate line number. 
-4. Launch CMake with `run`. CMake will now run till it hits the breakpoint
+4. `run` command will start Cmake. CMake will now run till it hits the breakpoint
 5. `next` and `step` will go to next line, and step into the function respectively, just like gdb.
 6. Type `help` on the REPL to see what commands are available.
 ```
@@ -46,13 +62,15 @@ stacktrace              Display current call stack (aliases: st, backtrace, bt)
 
 Other:
 ------
-quit, q              Exit the debugger
-help, h              Display this help message
+pipe <cmakedbg command> | <shell command>     Pipe the output of a cmakedbg command to a shell
+                                              command e.g. pipe info vars | less
+quit, q                                       Exit the debugger
+help, h                                       Display this help message
 
 Notes:
 - Many commands require the CMake build to be running first (start with 'run')
 - Commands can use either full names or their shorter aliases
-- Empty input will be ignored
+- Empty input will repeat the last command
 - Unknown commands will display an error message
 ```
 
@@ -62,8 +80,8 @@ CMake 3.27 onward, CMake has implemented the [Debug Adapter
 Protocol](https://microsoft.github.io/debug-adapter-protocol/implementors/tools). This allows for
 tools to hook into a running CMake process and step through the CMake configuration steps line by
 line like you would with a programming language debugger. There is a plugin for VSCode that
-leverages this to provide a CMake GUI debugger through their CMake Tools extension. But there isn't
-a plain CLI CMake debugger yet. UNTIL NOW!!! 
+leverages this to provide a editor integrated CMake GUI debugger through their CMake Tools
+extension. But there isn't a plain CLI CMake debugger yet. UNTIL NOW!!! 
 
 
 
@@ -87,6 +105,7 @@ a plain CLI CMake debugger yet. UNTIL NOW!!!
   stackframe response that the number of frames in the list can be more than 1.j
 - [x] add ability to pipe output of cmakedbg command outputs to shell commands
 - [ ] tests for pipe command, parse user output, other functions
-- [ ] figure out how to make this installable as a command line utility
+- [x] figure out how to make this installable as a command line utility
+- [ ] publish to PyPI
 - [ ] change how the list command works to be more aligned to gdb behavior
 - [ ] refactor for readability, and add lots of tests

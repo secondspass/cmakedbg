@@ -11,6 +11,9 @@ requires-python = ">=3.10"
 dependencies = [
 ]
 
+[project.scripts]
+cmakedbg = "cmakedbg.debugger:main"
+
 [tool.poetry]
 
 [tool.poetry.group.dev.dependencies]
