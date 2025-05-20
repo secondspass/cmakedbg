@@ -1,4 +1,3 @@
-import cmakedbg
-
 if __name__ == '__main__':
-    cmakedbg.main()
+    from cmakedbg import debugger
+    debugger.main()
