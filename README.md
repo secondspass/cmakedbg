@@ -14,6 +14,15 @@ Similar to gdb, you can
 This is useful for those of us that work mainly in the terminal and needed a gdb-like terminal tool
 to help debug complicated CMake builds.
 
+# Install from PyPI
+```
+pip install cmakedbg
+```
+or
+```
+pipx install cmakedbg
+```
+
 # How to install
 1. Clone this repository and cd into it
 2. Run `pip install .` (make sure you set up your virtual environment first, or use `pipx install .`
@@ -107,6 +116,6 @@ which this fulfills.
 - [x] add ability to pipe output of cmakedbg command outputs to shell commands
 - [ ] tests for pipe command, parse user output, other functions
 - [x] figure out how to make this installable as a command line utility
-- [ ] publish to PyPI
+- [x] publish to PyPI
 - [ ] change how the list command works to be more aligned to gdb behavior
 - [ ] refactor for readability, and add lots of tests

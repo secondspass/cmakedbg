@@ -1,6 +1,6 @@
 [project]
 name = "cmakedbg"
-version = "0.1.0"
+version = "0.1.1"
 description = "a cmake debugger like gdb. Needs cmake >=3.27"
 authors = [
     {name = "subil",email = "subil@secondspass.org"}
