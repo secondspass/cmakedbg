@@ -23,7 +23,8 @@ or
 pipx install cmakedbg
 ```
 
-# How to install
+
+# How to install from source
 1. Clone this repository and cd into it
 2. Run `pip install .` (make sure you set up your virtual environment first, or use `pipx install .`
    to install it without needing to set up a virtual environment).
@@ -92,6 +93,7 @@ line like you would with a programming language debugger. There is a plugin for 
 leverages this to provide a editor integrated CMake GUI debugger through their CMake Tools
 extension. But there is a need for a plain CLI debugger that we can use from the terminal like GDB,
 which this fulfills.
+
 
 
 

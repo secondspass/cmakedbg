@@ -41,6 +41,11 @@ check_untyped_defs = "True"
 [tool.poetry]
 
 
+[project.scripts]
+cmakedbg = "cmakedbg.debugger:main"
+
+
+[tool.poetry]
 
 [tool.poetry.group.dev.dependencies]
 mypy = "^1.15.0"
