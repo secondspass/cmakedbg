@@ -14,7 +14,17 @@ Similar to gdb, you can
 This is useful for those of us that work mainly in the terminal and needed a gdb-like terminal tool
 to help debug complicated CMake builds.
 
-# How to install
+# Install from PyPI
+```
+pip install cmakedbg
+```
+or
+```
+pipx install cmakedbg
+```
+
+
+# How to install from source
 1. Clone this repository and cd into it
 2. Run `pip install .` (make sure you set up your virtual environment first, or use `pipx install .`
    to install it without needing to set up a virtual environment).
@@ -81,7 +91,9 @@ Protocol](https://microsoft.github.io/debug-adapter-protocol/implementors/tools)
 tools to hook into a running CMake process and step through the CMake configuration steps line by
 line like you would with a programming language debugger. There is a plugin for VSCode that
 leverages this to provide a editor integrated CMake GUI debugger through their CMake Tools
-extension. But there isn't a plain CLI CMake debugger yet. UNTIL NOW!!! 
+extension. But there is a need for a plain CLI debugger that we can use from the terminal like GDB,
+which this fulfills.
+
 
 
 
@@ -106,6 +118,6 @@ extension. But there isn't a plain CLI CMake debugger yet. UNTIL NOW!!!
 - [x] add ability to pipe output of cmakedbg command outputs to shell commands
 - [ ] tests for pipe command, parse user output, other functions
 - [x] figure out how to make this installable as a command line utility
-- [ ] publish to PyPI
+- [x] publish to PyPI
 - [ ] change how the list command works to be more aligned to gdb behavior
 - [ ] refactor for readability, and add lots of tests
