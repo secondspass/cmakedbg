@@ -219,6 +219,22 @@ def validate_filepath_and_linenum(filepath_and_linenum: str) -> tuple[str, int]:
         raise RuntimeWarning(f"User error: {filepath} is not a valid file")
 
 
+def collect_variables(cmake_dap_socket, debugger_state, body_json):
+    for variable in body_json["body"]["variables"]:
+        debugger_state.cmake_variables[variable["name"]] = variable[
+            "value"
+        ]
+        if variable["name"] in [
+            "CacheVariables",
+            "Directories",
+            "Locals",
+        ]:
+            debugger_state.top_level_vars = (
+                debugger_state.top_level_vars + 1
+            )
+            send_request(cmake_dap_socket, variables, variable["variablesReference"])
+
+
 def dbg_quit(debugger_state: DebuggerState):
     print()
     debugger_state.cmake_process_handle.kill()
@@ -449,6 +465,66 @@ def launch_cmake(cmd: list, pipe_host, print_help):
     return cmd_handle
 
 
+def response_dispatch(s, debugger_state):
+    body_json, debugger_state.response = recv_response(
+        s, debugger_state.response
+    )
+    match body_json:
+        case {"type": "response", "command": "initialize"}:
+            pass
+        case {"type": "event", "event": "initialized"}:
+            request_func, args = process_user_input(debugger_state)
+            send_request(s, request_func, *args)
+        case {"type": "response", "command": "setBreakpoints"}:
+            request_func, args = process_user_input(debugger_state)
+            send_request(s, request_func, *args)
+        case {"type": "response", "command": "configurationDone"}:
+            debugger_state.already_running = True
+        case {"type": "event", "event": "stopped"}:
+            send_request(s, stacktrace)
+        case {
+            "type": "response",
+            "command": "stackTrace",
+            "body": {
+                "stackFrames": [
+                    {
+                        "id": frame_id,
+                        "line": linenumber,
+                        "source": {"path": filepath},
+                    } as first_frame,
+                    *other_frames,
+                ]
+            },
+        }:
+            send_request(s, scopes, frame_id)
+            debugger_state.current_line = (filepath, linenumber)
+            debugger_state.stacktrace = [first_frame, *other_frames]
+        case {
+            "type": "response",
+            "command": "scopes",
+            "body": {"scopes": [{"variablesReference": var_ref}]},
+        }:
+            send_request(s, variables, var_ref)
+        case {"type": "response", "command": "variables"}:
+            collect_variables(s, debugger_state, body_json)
+            if debugger_state.top_level_vars > 0:
+                debugger_state.top_level_vars = (
+                    debugger_state.top_level_vars - 1
+                )
+                response_dispatch(s, debugger_state)
+
+            request_func, args = process_user_input(debugger_state)
+            send_request(s, request_func, *args)
+
+        case {"type": "event", "event": "terminated"}:
+            dbg_quit(debugger_state)
+
+        case _:  # Default case if no other case is matched
+            # Consider logging this for debugging.
+            print(f"Unhandled message type: {body_json}")
+            pass
+
+
 def main():
     debugger_state = DebuggerState()
     # TODO: add argparsing to get the -v|--verbose flag
@@ -486,75 +562,8 @@ def main():
         send_request(s, initialize)
 
         while True:
-            body_json, debugger_state.response = recv_response(
-                s, debugger_state.response
-            )
-            match body_json:
-                case {"type": "response", "command": "initialize"}:
-                    pass
-                case {"type": "event", "event": "initialized"}:
-                    request_func, args = process_user_input(debugger_state)
-                    send_request(s, request_func, *args)
-                case {"type": "response", "command": "setBreakpoints"}:
-                    request_func, args = process_user_input(debugger_state)
-                    send_request(s, request_func, *args)
-                case {"type": "response", "command": "configurationDone"}:
-                    debugger_state.already_running = True
-                case {"type": "event", "event": "stopped"}:
-                    send_request(s, stacktrace)
-                case {
-                    "type": "response",
-                    "command": "stackTrace",
-                    "body": {
-                        "stackFrames": [
-                            {
-                                "id": frame_id,
-                                "line": linenumber,
-                                "source": {"path": filepath},
-                            } as first_frame,
-                            *other_frames,
-                        ]
-                    },
-                }:
-                    send_request(s, scopes, frame_id)
-                    debugger_state.current_line = (filepath, linenumber)
-                    debugger_state.stacktrace = [first_frame, *other_frames]
-                case {
-                    "type": "response",
-                    "command": "scopes",
-                    "body": {"scopes": [{"variablesReference": var_ref}]},
-                }:
-                    send_request(s, variables, var_ref)
-                case {"type": "response", "command": "variables"}:
-                    for variable in body_json["body"]["variables"]:
-                        debugger_state.cmake_variables[variable["name"]] = variable[
-                            "value"
-                        ]
-                        if variable["name"] in [
-                            "CacheVariables",
-                            "Directories",
-                            "Locals",
-                        ]:
-                            debugger_state.top_level_vars = (
-                                debugger_state.top_level_vars + 1
-                            )
-                            send_request(s, variables, variable["variablesReference"])
-                    if debugger_state.top_level_vars > 0:
-                        debugger_state.top_level_vars = (
-                            debugger_state.top_level_vars - 1
-                        )
-                        continue
+            response_dispatch(s, debugger_state)
 
-                    request_func, args = process_user_input(debugger_state)
-                    send_request(s, request_func, *args)
-
-                case {"type": "event", "event": "terminated"}:
-                    dbg_quit(debugger_state)
-
-                case _:  # Default case if no other case is matched
-                    # Consider logging this for debugging.
-                    print(f"Unhandled message type: {body_json}")
-                    pass
 
 
 if __name__ == "__main__":

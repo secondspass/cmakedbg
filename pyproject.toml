@@ -31,14 +31,11 @@ classifiers = [
 [project.urls]
 Homepage = "https://github.com/secondspass/cmakedbg"
 
-[project.scripts]
-cmakedbg = "cmakedbg.debugger:main"
 
 [tool.mypy]
 allow_redefinition = "True"
 check_untyped_defs = "True"
 
-[tool.poetry]
 
 
 [project.scripts]

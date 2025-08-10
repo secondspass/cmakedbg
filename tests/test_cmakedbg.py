@@ -1,4 +1,4 @@
-from cmakedbg import cmakedbg
+from cmakedbg import debugger
 import os
 from pprint import pprint
 from pathlib import Path
@@ -11,7 +11,7 @@ import json
 
 
 def test_validate_filepath_and_linenum():
-    vfl = cmakedbg.validate_filepath_and_linenum
+    vfl = debugger.validate_filepath_and_linenum
     filename = "./tests/cmake-examples-master/08-mpi/CMakeLists.txt"
     fullpath = str(Path(filename).expanduser().resolve())
 
@@ -30,7 +30,7 @@ def test_validate_filepath_and_linenum():
 
 
 def test_debugger_state():
-    debugger_state = cmakedbg.DebuggerState()
+    debugger_state = debugger.DebuggerState()
     assert len(debugger_state.host.split('-')) == 6
     assert "/tmp/cmake" in debugger_state.host
     assert debugger_state.already_running is False
@@ -39,13 +39,13 @@ def test_debugger_state():
 
 
 def test_initialize():
-    initi = cmakedbg.initialize()
+    initi = debugger.initialize()
     assert initi['command'] == 'initialize'
 
 
 @pytest.fixture(scope='class')
 def debugger_state():
-    return cmakedbg.DebuggerState()
+    return debugger.DebuggerState()
 
 
 @pytest.fixture(scope='class')
@@ -57,7 +57,7 @@ def cmake_background_process(debugger_state):
         shutil.rmtree(build_dir)
     build_dir.mkdir()
     os.chdir(str(build_dir))
-    bg_process = cmakedbg.launch_cmake(["cmake", ".."], debugger_state.host, lambda: print("help"))
+    bg_process = debugger.launch_cmake(["cmake", ".."], debugger_state.host, lambda: print("help"))
     yield bg_process
     bg_process.kill()
     os.chdir(str(curr_dir))
@@ -71,7 +71,7 @@ def cmake_dap_socket(debugger_state, cmake_background_process):
 
 
 def test_create_request():
-    request_bytes = cmakedbg.create_request(cmakedbg.initialize())
+    request_bytes = debugger.create_request(debugger.initialize())
     assert type(request_bytes) is bytes
     header, request = request_bytes.split(b"\r\n\r\n")
     content_length = header.decode().split()[-1]
@@ -83,13 +83,56 @@ def test_create_request():
 
 def test_send_request(debugger_state, cmake_dap_socket, cmake_background_process):
     debugger_state.cmake_process_handle = cmake_background_process
-    cmakedbg.send_request(cmake_dap_socket, cmakedbg.initialize)
-    body_json, debugger_state.response = cmakedbg.recv_response(cmake_dap_socket,
+    debugger.send_request(cmake_dap_socket, debugger.initialize)
+    body_json, debugger_state.response = debugger.recv_response(cmake_dap_socket,
                                                                 debugger_state.response)
     assert (body_json["type"], body_json["command"]) == ("response", "initialize")
-    body_json, debugger_state.response = cmakedbg.recv_response(
+    body_json, debugger_state.response = debugger.recv_response(
         cmake_dap_socket, debugger_state.response)
     assert (body_json["type"], body_json["event"]) == ("event", "initialized")
+
+
+def test_process_user_input(debugger_state):
+    # TODO: fill this out
+    pass
+
+
+def test_parse_command(debugger_state):
+    pc = debugger.parse_command
+    # TODO: fill this out
+    # pipe command
+    # TODO
+    # breakpoint command:
+    # case 1: good filepath
+    filepath_and_linenum = "./tests/cmake-examples-master/08-mpi/CMakeLists.txt:2"
+    filepath, linenum = debugger.validate_filepath_and_linenum(filepath_and_linenum)
+    for cmdname in ["breakpoint", "break", "br"]:
+        assert (debugger.set_breakpoints,
+                [filepath, linenum]) == pc(debugger_state,
+                                           [cmdname,
+                                            filepath_and_linenum])
+    # case 2: bad linenum
+    filepath_and_linenum = "./tests/cmake-examples-master/08-mpi/CMakeLists.txt:5a0"
+    for cmdname in ["breakpoint", "break", "br"]:
+        assert "line number is not a valid integer" in pc(debugger_state,
+                                                          [cmdname,
+                                                           filepath_and_linenum]).getvalue()
+    # case 3: bad filepath
+    filepath_and_linenum = "./tests/casdfdsafmake-examples-master/08-mpi/CMakeLists.txt:50"
+    for cmdname in ["breakpoint", "break", "br"]:
+        assert "is not a valid file" in pc(debugger_state,
+                                           [cmdname,
+                                            filepath_and_linenum]).getvalue()
+    # case 4: malformed input
+    filepath_and_linenum = "./tests/cmake-examples-master/08-mpi/CMakeLists.txt:50:12"
+    for cmdname in ["breakpoint", "break", "br"]:
+        assert "breakpoint should be of the form" in pc(debugger_state,
+                                                        [cmdname,
+                                                         filepath_and_linenum]).getvalue()
+
+    # run command:
+    # case 1: already running
+    # case 2: not already running
 
 
 # each function executes in sequence
@@ -98,43 +141,43 @@ def test_send_request(debugger_state, cmake_dap_socket, cmake_background_process
 class TestCommands:
     def test_initialize(self, debugger_state, cmake_dap_socket, cmake_background_process):
         debugger_state.cmake_process_handle = cmake_background_process
-        cmakedbg.send_request(cmake_dap_socket, cmakedbg.initialize)
-        body_json, debugger_state.response = cmakedbg.recv_response(cmake_dap_socket,
+        debugger.send_request(cmake_dap_socket, debugger.initialize)
+        body_json, debugger_state.response = debugger.recv_response(cmake_dap_socket,
                                                                     debugger_state.response)
         assert (body_json["type"], body_json["command"]) == ("response", "initialize")
-        body_json, debugger_state.response = cmakedbg.recv_response(
+        body_json, debugger_state.response = debugger.recv_response(
             cmake_dap_socket, debugger_state.response)
         assert (body_json["type"], body_json["event"]) == ("event", "initialized")
 
     def test_set_breakpoints(self, debugger_state, cmake_dap_socket):
-        filepath, linenum = cmakedbg.validate_filepath_and_linenum("../CMakeLists.txt:6")
-        cmakedbg.send_request(cmake_dap_socket, cmakedbg.set_breakpoints,
+        filepath, linenum = debugger.validate_filepath_and_linenum("../CMakeLists.txt:6")
+        debugger.send_request(cmake_dap_socket, debugger.set_breakpoints,
                               filepath, linenum)
-        body_json, debugger_state.response = cmakedbg.recv_response(cmake_dap_socket,
+        body_json, debugger_state.response = debugger.recv_response(cmake_dap_socket,
                                                                     debugger_state.response)
         assert (body_json["type"], body_json["command"]) == ("response", "setBreakpoints")
 
     def test_configuration_done(self, debugger_state, cmake_dap_socket):
-        cmakedbg.send_request(cmake_dap_socket, cmakedbg.configuration_done)
-        body_json, debugger_state.response = cmakedbg.recv_response(
+        debugger.send_request(cmake_dap_socket, debugger.configuration_done)
+        body_json, debugger_state.response = debugger.recv_response(
             cmake_dap_socket, debugger_state.response)
         assert (body_json["type"], body_json["command"]) == ("response", "configurationDone")
 
     def test_stop_at_first_breakpoint(self, debugger_state, cmake_dap_socket):
-        body_json, debugger_state.response = cmakedbg.recv_response(cmake_dap_socket,
+        body_json, debugger_state.response = debugger.recv_response(cmake_dap_socket,
                                                                     debugger_state.response)
         assert (body_json["type"],
                 body_json["event"],
                 body_json["body"]["reason"]) == ("event",
                                                  "thread",
                                                  "started")
-        body_json, debugger_state.response = cmakedbg.recv_response(
+        body_json, debugger_state.response = debugger.recv_response(
             cmake_dap_socket, debugger_state.response)
         assert (body_json["type"],
                 body_json["event"],
                 body_json["body"]["reason"],
                 body_json["body"]["breakpoint"]["verified"]) == ("event", "breakpoint", "changed", True)
-        body_json, debugger_state.response = cmakedbg.recv_response(
+        body_json, debugger_state.response = debugger.recv_response(
             cmake_dap_socket, debugger_state.response)
         assert (body_json["type"],
                 body_json["event"],
@@ -147,9 +190,13 @@ class TestCommands:
         pass
 
     def test_get_variables(self, debugger_state, cmake_dap_socket):
-        cmakedbg.send_request(cmake_dap_socket, cmakedbg.stacktrace)
-        body_json, debugger_state.response = cmakedbg.recv_response(cmake_dap_socket,
+        debugger.send_request(cmake_dap_socket, debugger.stacktrace)
+        body_json, debugger_state.response = debugger.recv_response(cmake_dap_socket,
                                                                     debugger_state.response)
+        assert (body_json["type"],
+                body_json["command"],) == ("response", "stackTrace")
+        assert isinstance(body_json["body"]["stackFrames"], list)
+
         # TODO: complete this
 
     def test_get_source(self, debugger_state, cmake_dap_socket):
