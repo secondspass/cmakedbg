@@ -9,38 +9,7 @@ import socket
 from subprocess import Popen
 import json
 
-
-def test_validate_filepath_and_linenum():
-    vfl = debugger.validate_filepath_and_linenum
-    filename = "./tests/cmake-examples-master/08-mpi/CMakeLists.txt"
-    fullpath = str(Path(filename).expanduser().resolve())
-
-    # improper format
-    with pytest.raises(RuntimeWarning):
-        vfl(f"{filename}:12:34")
-    # fake line numbers
-    for fakelinenumber in ["asdg", "13sgh"]:
-        with pytest.raises(ValueError):
-            vfl(f"{filename}:{fakelinenumber}")
-    # non existent file
-    with pytest.raises(RuntimeWarning):
-        vfl("./sdfgdstyw34")
-    assert (fullpath, 1) == vfl(f"{filename}")
-    assert (fullpath, 23) == vfl(f"{filename}:23")
-
-
-def test_debugger_state():
-    debugger_state = debugger.DebuggerState()
-    assert len(debugger_state.host.split('-')) == 6
-    assert "/tmp/cmake" in debugger_state.host
-    assert debugger_state.already_running is False
-    assert debugger_state.cmake_variables == {}
-    assert debugger_state.top_level_vars == 0
-
-
-def test_initialize():
-    initi = debugger.initialize()
-    assert initi['command'] == 'initialize'
+# ---- FIXTURES ----
 
 
 @pytest.fixture(scope='class')
@@ -70,6 +39,39 @@ def cmake_dap_socket(debugger_state, cmake_background_process):
         yield s
 
 
+def test_validate_filepath_and_linenum():
+    vfl = debugger.validate_filepath_and_linenum
+    filename = "./tests/cmake-examples-master/08-mpi/CMakeLists.txt"
+    fullpath = str(Path(filename).expanduser().resolve())
+
+    # improper format
+    with pytest.raises(RuntimeWarning):
+        vfl(f"{filename}:12:34")
+    # fake line numbers
+    for fakelinenumber in ["asdg", "13sgh"]:
+        with pytest.raises(ValueError):
+            vfl(f"{filename}:{fakelinenumber}")
+    # non existent file
+    with pytest.raises(RuntimeWarning):
+        vfl("./sdfgdstyw34")
+    assert (fullpath, 1) == vfl(f"{filename}")
+    assert (fullpath, 23) == vfl(f"{filename}:23")
+
+
+# --- FUNCTION TESTS ---
+def test_debugger_state(debugger_state):
+    assert len(debugger_state.host.split('-')) == 6
+    assert "/tmp/cmake" in debugger_state.host
+    assert debugger_state.already_running is False
+    assert debugger_state.cmake_variables == {}
+    assert debugger_state.top_level_vars == 0
+
+
+def test_initialize():
+    initi = debugger.initialize()
+    assert initi['command'] == 'initialize'
+
+
 def test_create_request():
     request_bytes = debugger.create_request(debugger.initialize())
     assert type(request_bytes) is bytes
@@ -97,48 +99,74 @@ def test_process_user_input(debugger_state):
     pass
 
 
-def test_parse_command(debugger_state):
-    pc = debugger.parse_command
-    # TODO: fill this out
-    # pipe command
-    # TODO
-    # breakpoint command:
-    # case 1: good filepath
-    filepath_and_linenum = "./tests/cmake-examples-master/08-mpi/CMakeLists.txt:2"
-    filepath, linenum = debugger.validate_filepath_and_linenum(filepath_and_linenum)
-    for cmdname in ["breakpoint", "break", "br"]:
+class Testparse_command:
+    """testing the parse_command function"""
+
+    @pytest.fixture(autouse=True)
+    def setup(self, debugger_state):
+        self.pc = debugger.parse_command
+        self.debugger_state = debugger.DebuggerState()
+        yield
+
+    def test_command_pipe(self):
+        pass
+
+    @pytest.mark.parametrize("cmdname", ["breakpoint", "break", "br"])
+    def test_command_breakpoint(self, cmdname):
+        """testing the 'breakpoint' command"""
+        # case 1: good filepath
+        filepath_and_linenum = "./tests/cmake-examples-master/08-mpi/CMakeLists.txt:2"
+        filepath, linenum = debugger.validate_filepath_and_linenum(filepath_and_linenum)
         assert (debugger.set_breakpoints,
-                [filepath, linenum]) == pc(debugger_state,
-                                           [cmdname,
-                                            filepath_and_linenum])
-    # case 2: bad linenum
-    filepath_and_linenum = "./tests/cmake-examples-master/08-mpi/CMakeLists.txt:5a0"
-    for cmdname in ["breakpoint", "break", "br"]:
-        assert "line number is not a valid integer" in pc(debugger_state,
-                                                          [cmdname,
-                                                           filepath_and_linenum]).getvalue()
-    # case 3: bad filepath
-    filepath_and_linenum = "./tests/casdfdsafmake-examples-master/08-mpi/CMakeLists.txt:50"
-    for cmdname in ["breakpoint", "break", "br"]:
-        assert "is not a valid file" in pc(debugger_state,
-                                           [cmdname,
-                                            filepath_and_linenum]).getvalue()
-    # case 4: malformed input
-    filepath_and_linenum = "./tests/cmake-examples-master/08-mpi/CMakeLists.txt:50:12"
-    for cmdname in ["breakpoint", "break", "br"]:
-        assert "breakpoint should be of the form" in pc(debugger_state,
-                                                        [cmdname,
-                                                         filepath_and_linenum]).getvalue()
+                [filepath, linenum]) == self.pc(self.debugger_state,
+                                                [cmdname,
+                                                 filepath_and_linenum])
+        # case 2: bad linenum
+        filepath_and_linenum = "./tests/cmake-examples-master/08-mpi/CMakeLists.txt:5a0"
+        assert "line number is not a valid integer" in self.pc(self.debugger_state,
+                                                               [cmdname,
+                                                                filepath_and_linenum]).getvalue()
+        # case 3: bad filepath
+        filepath_and_linenum = "./tests/casdfdsafmake-examples-master/08-mpi/CMakeLists.txt:50"
+        assert "is not a valid file" in self.pc(self.debugger_state,
+                                                [cmdname,
+                                                 filepath_and_linenum]).getvalue()
+        # case 4: malformed input
+        filepath_and_linenum = "./tests/cmake-examples-master/08-mpi/CMakeLists.txt:50:12"
+        assert "breakpoint should be of the form" in self.pc(self.debugger_state,
+                                                             [cmdname,
+                                                              filepath_and_linenum]).getvalue()
 
-    # run command:
-    # case 1: already running
-    # case 2: not already running
+    @pytest.mark.parametrize("cmdname", ["run", "r"])
+    def test_command_run(self, cmdname):
+        # run command:
+        # case 1: not already running
+        assert (debugger.configuration_done, []) == self.pc(self.debugger_state, [cmdname,])
+
+        # case 2: already running
+        self.debugger_state.already_running = True
+        assert "CMake already started running" in self.pc(self.debugger_state,
+                                                          [cmdname,]).getvalue()
+
+    @pytest.mark.parametrize("cmdname", ["continue", "c"])
+    def test_command_continue(self, cmdname):
+        # run command:
+        # case 1: not already running
+        assert "CMake build has not started running" in self.pc(self.debugger_state,
+                                                                [cmdname,]).getvalue()
+
+        # case 2: already running
+        self.debugger_state.already_running = True
+        assert (debugger.dbg_continue, []) == self.pc(self.debugger_state, [cmdname,])
 
 
-# each function executes in sequence
-# TODO: add piece that will run these tests on different CMakeLists from the cmake example
-# collection.
 class TestCommands:
+    """
+        each function executes in sequence
+        TODO: add piece that will run these tests on different CMakeLists from the cmake example
+        collection.
+        """
+
     def test_initialize(self, debugger_state, cmake_dap_socket, cmake_background_process):
         debugger_state.cmake_process_handle = cmake_background_process
         debugger.send_request(cmake_dap_socket, debugger.initialize)

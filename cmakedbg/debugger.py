@@ -564,7 +564,5 @@ def main():
         while True:
             response_dispatch(s, debugger_state)
 
-
-
 if __name__ == "__main__":
     main()
