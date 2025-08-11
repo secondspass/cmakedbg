@@ -1,12 +1,9 @@
 from cmakedbg import debugger
 import os
-from pprint import pprint
 from pathlib import Path
-import time
 import shutil
 import pytest
 import socket
-from subprocess import Popen
 import json
 
 # ---- FIXTURES ----
@@ -39,6 +36,7 @@ def cmake_dap_socket(debugger_state, cmake_background_process):
         yield s
 
 
+# --- FUNCTION TESTS ---
 def test_validate_filepath_and_linenum():
     vfl = debugger.validate_filepath_and_linenum
     filename = "./tests/cmake-examples-master/08-mpi/CMakeLists.txt"
@@ -58,7 +56,6 @@ def test_validate_filepath_and_linenum():
     assert (fullpath, 23) == vfl(f"{filename}:23")
 
 
-# --- FUNCTION TESTS ---
 def test_debugger_state(debugger_state):
     assert len(debugger_state.host.split('-')) == 6
     assert "/tmp/cmake" in debugger_state.host
